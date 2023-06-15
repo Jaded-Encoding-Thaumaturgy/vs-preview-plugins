@@ -1,0 +1,190 @@
+from PyQt6.QtGui import QGuiApplication
+from PyQt6.QtWidgets import QPushButton, QSlider, QVBoxLayout, QWidget, QLabel, QComboBox, QLineEdit, QHBoxLayout
+from PyQt6.QtCore import QTimer, Qt
+
+from enum import Enum
+from vspreview.plugins import AbstractPlugin, PluginConfig
+
+__all__ = [
+    'ResizeCalc'
+]
+
+## missing stuff
+# more subsampling values
+# edit resize command???
+# show subsampling restrictions and let the user edit them
+# show pixel count
+# I WILL NOT TO ANAMORPHIC I WILL NOT TO ANAMORPHIC I WILL NOT TO ANAMORPHIC
+# avspmod slider is always width? does this cause problems for me?
+
+class Mod(Enum):
+    MOD_444 = (1, 1)
+    MOD_422 = (2, 1)
+    MOD_420 = (2, 2)
+
+
+class ResizeCalc(AbstractPlugin, QWidget):
+    _config = PluginConfig('dev.sinc.resize', 'Resize Calc')
+
+    def setup_ui(self):
+        self.subsampling = Mod.MOD_420
+        self.error_thr = 0.3
+        self.output = [0, 0]
+
+        self.layout = QVBoxLayout()
+
+        self.text = QHBoxLayout()
+        self.text_box1_label = QLabel("Width:")
+        self.text_box1 = QLineEdit()
+        self.text_box2_label = QLabel("Height:")
+        self.text_box2 = QLineEdit()
+
+        self.common_res_label = QLabel("Target:")
+        self.common_res = QComboBox()
+        self.common_res.setEditable(True)
+        self.common_res.setFixedWidth(66)
+
+        self.common_res.addItem("2160", str(3840))
+        self.common_res.addItem("1080", str(1920))
+        self.common_res.addItem("810", str(1440))
+        self.common_res.addItem("720", str(1280))
+        self.common_res.addItem("576", str(1024))
+        self.common_res.addItem("480", str(854))
+
+        self.text_box1.textChanged.connect(self.calc_resize)
+        self.text_box2.textChanged.connect(self.calc_resize)
+
+        self.text.addWidget(self.text_box1_label)
+        self.text.addWidget(self.text_box1)
+        self.text.addWidget(self.text_box2_label)
+        self.text.addWidget(self.text_box2)
+
+        self.text.addWidget(self.common_res_label)
+        self.text.addWidget(self.common_res)
+
+        self.slider = QSlider(Qt.Orientation.Horizontal)
+        self.slider.setRange(20, 8196)
+        self.slider.setValue(1080)
+        self.slider.setPageStep(1)
+        # skill issue hack
+        QTimer.singleShot(0, self.force_ui_update)
+        self.slider.valueChanged.connect(self.calc_resize)
+
+        self.label = QLabel()
+        self.copy_button = QPushButton("Copy resize command")
+        # can this be done with a loop?
+        self.combo_box = QComboBox()
+        self.combo_box.addItem("420", Mod.MOD_420)
+        self.combo_box.addItem("422", Mod.MOD_422)
+        self.combo_box.addItem("444", Mod.MOD_444)
+
+        self.error_box = QLineEdit()
+        self.error_box.setText(str(self.error_thr))
+
+        self.combo_box_label = QLabel("Subsampling restriction")
+        self.error_box_label = QLabel("AR error threshold %:")
+
+        self.combo_box_layout = QHBoxLayout()
+        self.error_box_layout = QHBoxLayout()
+
+        self.combo_box_layout.addWidget(self.combo_box_label)
+        self.combo_box_layout.addWidget(self.combo_box)
+        self.error_box_layout.addWidget(self.error_box_label)
+        self.error_box_layout.addWidget(self.error_box)
+
+        self.combo_box.currentIndexChanged.connect(self.internal_data)
+        self.combo_box.currentIndexChanged.connect(self.calc_resize)
+        self.error_box.textChanged.connect(self.calc_resize)
+        self.common_res.lineEdit().textChanged.connect(self.update_slider)
+        self.copy_button.clicked.connect(self.copy_command)
+        self.slider.valueChanged.connect(self.update_common_res)
+
+        self.layout.addLayout(self.text)
+        self.layout.addWidget(self.slider)
+        self.layout.addWidget(self.label)
+        self.layout.addLayout(self.combo_box_layout)
+        self.layout.addLayout(self.error_box_layout)
+        self.layout.addWidget(self.copy_button)
+
+        self.setLayout(self.layout)
+
+    def force_ui_update(self):
+        current_value = self.slider.value()
+    
+        self.slider.setValue(current_value + 1)
+        self.slider.setValue(current_value)
+
+        self.text_box1.setText(str(self.main.current_output.width))
+        self.text_box2.setText(str(self.main.current_output.height))
+
+    def update_common_res(self, value):
+        value_str = str(value)
+        self.common_res.lineEdit().setText(value_str)
+
+    def update_slider(self, text):
+        try:
+            self.slider.setValue(int(text))
+        except ValueError:
+            self.slider.setValue(20)
+
+    def calc_resolution(
+            self, orig_w: int, orig_h: int, target: int,
+            subsampling: Mod = Mod.MOD_420,
+            ar_error_thr: float = 0.3
+        ):
+            aspect_ratio = orig_w / orig_h
+            max_width = round(target * 16/9)
+
+            new_height = target
+            new_width = round(target * aspect_ratio)
+
+            subsampling_factor_width, subsampling_factor_height = subsampling.value
+            new_width = new_width - new_width % subsampling_factor_width
+            new_height = new_height - new_height % subsampling_factor_height
+
+            if new_width > max_width:
+                new_width = max_width
+                new_height = round(new_width / aspect_ratio)
+
+                new_width = new_width - new_width % subsampling_factor_width
+                new_height = new_height - new_height % subsampling_factor_height
+
+            output_aspect_ratio = new_width / new_height
+            aspect_ratio_error = abs(aspect_ratio - output_aspect_ratio) / aspect_ratio * 1000
+            # TODO search in both directions
+            if aspect_ratio_error > ar_error_thr:
+                return self.calc_resolution(
+                    orig_w, orig_h, target + 1,
+                    subsampling=subsampling,
+                    ar_error_thr=ar_error_thr
+                )
+
+            return new_width, new_height, aspect_ratio, output_aspect_ratio, round(aspect_ratio_error, 2)
+
+    def calc_resize(self):
+        try:
+            width, height, original_ar, new_ar, error_ar = self.calc_resolution(
+                orig_w=float(self.text_box1.text()),
+                orig_h=float(self.text_box2.text()),
+                target=self.slider.value(),
+                subsampling=self.subsampling,
+                ar_error_thr=float(self.error_box.text())
+            )
+            self.label.setText(
+                f"Target resolution: {width}x{height}\n\
+                Original AR: {original_ar:.4f}\n\
+                New AR: {new_ar:.4f}\n\
+                AR ERROR: {error_ar:.4f}%\n\
+                Subsampling: {self.subsampling.value}"
+            )
+            self.output = [width, height]
+        except ValueError:
+            self.label.setText("Target resolution: NaN")
+
+    def copy_command(self):
+        clipboard = QGuiApplication.clipboard()
+        clipboard.setText(str(f".resize.Spline64(width={self.output[0]}, height={self.output[1]})"))
+
+    def internal_data(self, index):
+        self.subsampling = self.combo_box.itemData(index)
+        self.error_thr = self.error_box
