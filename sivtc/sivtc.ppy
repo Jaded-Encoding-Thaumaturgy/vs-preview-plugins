@@ -32,7 +32,7 @@ class SIVTCPlugin(MappedNodesPlugin, QWidget):
         ])
 
     def get_node(self, node: vs.VideoNode) -> vs.VideoNode:
-        return sivtc(node)
+        return sivtc(node, self.cycle_spinbox.value(), not self.tff_switch.isChecked())
 
     def on_current_frame_changed(self, frame: Frame) -> None:
         frame = self.outputs.current.to_frame(self.main.current_output.to_time(frame))
