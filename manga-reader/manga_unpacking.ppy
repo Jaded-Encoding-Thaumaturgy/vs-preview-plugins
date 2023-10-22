@@ -1,0 +1,79 @@
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+if __name__ != '__vspreview__':
+    from zipfile import ZipFile
+
+    from vspreview.plugins import FileResolvePluginConfig, FileResolverPlugin, ResolvedScript
+    from vstools import FileSignatures, FileType
+
+    __all__ = [
+        'MangaFileResolverPlugin'
+    ]
+
+    class MangaFileResolverPlugin(FileResolverPlugin):
+        _config = FileResolvePluginConfig('dev.setsugen.manga_reader', 'Manga Reader')
+
+        def __init__(self) -> None:
+            super().__init__()
+
+            self.image_file_types = set[str](f'.{sig.ext}' for sig in FileSignatures() if 'image' in sig.file_type)
+
+        def can_run_file(self, filepath: Path) -> bool:
+            return FileType.parse(filepath).file_type is FileType.ARCHIVE
+
+        def resolve_path(self, filepath: Path) -> ResolvedScript:
+            path_out = self.get_temp_path(True)
+
+            with ZipFile(filepath, 'r') as cbzip:
+                files_to_extract = [
+                    x for x in map(Path, cbzip.namelist()) if x.suffix in self.image_file_types
+                ]
+
+                sub_directories = {Path(x).parent for x in files_to_extract}
+                par_directories = {x.parent for x in sub_directories}
+
+                if sub_directories == par_directories == {Path('.')}:
+                    sub_name = filepath.stem
+                    for i, image in enumerate(files_to_extract):
+                        dst_path = (path_out / sub_name / str(i).rjust(5, '0')).with_suffix(image.suffix)
+
+                        dst_path.parent.mkdir(parents=True, exist_ok=True)
+                        dst_path.write_bytes(cbzip.read(str(image)))
+                else:
+                    for par in par_directories:
+                        for sub in sub_directories:
+                            if par in sub.parents:
+                                clean_sub = sub.relative_to(par)
+                                for i, image in enumerate(sorted([f for f in files_to_extract if sub in f.parents])):
+                                    dst_path = (
+                                        path_out / clean_sub.name / str(i).rjust(5, '0')
+                                    ).with_suffix(image.suffix)
+
+                                    dst_path.parent.mkdir(parents=True, exist_ok=True)
+                                    dst_path.write_bytes(cbzip.read(image.as_posix()))
+
+            return ResolvedScript(Path(__file__), str(filepath), dict(manga_folder=path_out, suffix=image.suffix), False)
+else:
+    from vstools import core, set_output, vs
+
+    if TYPE_CHECKING:
+        manga_folder: Path = Path()
+        suffix: str = ''
+
+    for folder in manga_folder.glob('*'):
+        files = core.imwri.Read(folder / f'%05d{suffix}', 0, True)
+
+        set_output(files, cache=False)
+
+        # size = files.get_frame(files.num_frames // 2)
+
+        # scaled = files.resize.Bicubic(size.width, size.height, vs.RGB24)
+        # to_rgb24 = files.resize.Bicubic(size.width, size.height, vs.RGB24, matrix_in=1)
+
+        # def _resize(n: int, f: vs.VideoFrame) -> vs.VideoNode:
+        #     if f.format.color_family is not vs.RGB:
+        #         return to_rgb24
+        #     return scaled
+
+        # set_output(scaled.std.BlankClip().std.FrameEval(_resize, files))
