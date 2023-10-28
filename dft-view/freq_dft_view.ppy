@@ -17,7 +17,7 @@ class DFTViewPlugin(MappedNodesViewPlugin):
         import numpy as np
         from cv2 import DFT_COMPLEX_OUTPUT, dft  # type: ignore
 
-        y = depth(plane(node, 0), 32)
+        y = depth(plane(node, 0, strict=False), 32)
 
         def _to_polar(f: vs.VideoFrame, n: int) -> vs.VideoFrame:
             src = np.asarray(f[0])
