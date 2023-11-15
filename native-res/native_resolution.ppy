@@ -890,7 +890,10 @@ class RescaleErrorAnalyzer(ExtendedWidget):
             start = self.width_min_spinbox.value()
             stop = self.width_max_spinbox.value()
 
-        step = self.step_spinbox.value()
+        step = round(
+            self.step_spinbox.value(), max(str(self.step_spinbox.minimum())[::-1].find('.'), 0)
+        )
+        step = min(max(step, self.step_spinbox.minimum()), self.step_spinbox.maximum())
 
         return self.rescale_mode, start, stop, step
 
