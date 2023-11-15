@@ -431,7 +431,7 @@ class RescaleErrorRunner(QObject):
 
     def __init__(
         self, analyzer: RescaleErrorAnalyzer, clip: vs.VideoNode, frame: int, is_integer: bool,
-        attempts: Sequence[tuple[float, float]], mode: str, kernel: Kernel
+        attempts: Sequence[tuple[float, float]], mode: str, metric_mode: int, kernel: Kernel
     ) -> None:
         super().__init__()
 
@@ -441,6 +441,7 @@ class RescaleErrorRunner(QObject):
         self.is_integer = is_integer
         self.attempts = attempts
         self.mode = mode
+        self.metric_mode = metric_mode
         self.kernel = kernel
 
     def run(self) -> None:
@@ -448,10 +449,16 @@ class RescaleErrorRunner(QObject):
 
         rescaled_clip = self.clip.std.BlankClip(length=len(self.attempts)).std.FrameEval(lambda n: rescaled_clips[n][self.frame])
 
-        rescaled_clip = core.std.Expr(
-            [self.clip[self.frame] * len(self.attempts), rescaled_clip],
-            'x y - 2 pow' if True else 'x y - abs dup 0.015 > swap 0 ?'
-        )
+        if self.metric_mode == 0:
+            metric_expr = 'x y - abs dup 0.015 > swap 0 ?'
+        elif self.metric_mode == 1:
+            metric_expr = 'x y - 2 pow'
+        elif self.metric_mode == 2:
+            metric_expr = 'x y - 2 pow sqrt'
+        else:
+            raise RuntimeError
+
+        rescaled_clip = core.std.Expr([self.clip[self.frame] * len(self.attempts), rescaled_clip], metric_expr)
         rescaled_clip = rescaled_clip.std.CropRel(10, 10, 10, 10).std.PlaneStats()
 
         self.error_step.emit()
@@ -609,6 +616,11 @@ class RescaleErrorAnalyzer(ExtendedWidget):
             stepType=DoubleSpinBox.StepType.AdaptiveDecimalStepType
         )
 
+        self.metric_type_combobox = ComboBox[str](
+            model=GeneralModel[str](['MAE', 'MSE', 'RMSE'], False),
+            currentIndex=1, sizeAdjustPolicy=ComboBox.SizeAdjustPolicy.AdjustToContents
+        )
+
         self.update_button = PushButton('Update', clicked=lambda _: self.render_canvas())
 
         HBoxLayout(self.controls, [
@@ -631,6 +643,10 @@ class RescaleErrorAnalyzer(ExtendedWidget):
                 QLabel('Kernel'),
                 self.kernels_combobox
             ]),
+            VBoxLayout([
+                QLabel('Metric'),
+                self.metric_type_combobox
+            ]),
             Stretch(),
             self.update_button
         ])
@@ -641,6 +657,7 @@ class RescaleErrorAnalyzer(ExtendedWidget):
 
         self.sizes_to_check_combobox.currentIndexChanged.connect(self.render_callback)
         self.kernels_combobox.currentIndexChanged.connect(self.render_callback)
+        self.metric_type_combobox.currentIndexChanged.connect(self.render_callback)
 
         # Loading
         self.errors_loading = QWidget()
@@ -799,7 +816,7 @@ class RescaleErrorAnalyzer(ExtendedWidget):
         if frame not in self.workers:
             self.set_visibility(True, False, False)
 
-            rescale_mode, start, stop, step, decimals = (*self._get_values(), self.step_decimals)
+            rescale_mode, metric_mode, start, stop, step, decimals = (*self._get_values(), self.step_decimals)
 
             wclip = self.workclips[self.main.current_output.source.clip]
 
@@ -815,7 +832,7 @@ class RescaleErrorAnalyzer(ExtendedWidget):
                 attempts = [(round(w, 0), round(h, 0)) for w, h in attempts]
 
             self.workers[frame] = RescaleErrorRunner(
-                self, wclip, int(frame), decimals == 0, attempts, rescale_mode, self.kernel
+                self, wclip, int(frame), decimals == 0, attempts, rescale_mode, metric_mode, self.kernel
             )
 
             self.workers[frame].error_step.connect(self.error_step_hook(frame, self.main.current_output.index))
@@ -882,7 +899,7 @@ class RescaleErrorAnalyzer(ExtendedWidget):
             return 0
         return max(str(step)[::-1].find("."), 0)
 
-    def _get_values(self) -> tuple[str, float, float, float]:
+    def _get_values(self) -> tuple[str, int, float, float, float]:
         if 'h' in self.rescale_mode:
             start = self.height_min_spinbox.value()
             stop = self.height_max_spinbox.value()
@@ -895,7 +912,7 @@ class RescaleErrorAnalyzer(ExtendedWidget):
         )
         step = min(max(step, self.step_spinbox.minimum()), self.step_spinbox.maximum())
 
-        return self.rescale_mode, start, stop, step
+        return self.rescale_mode, self.metric_type_combobox.currentIndex(), start, stop, step
 
     @property
     def kernel(self) -> Kernel:
