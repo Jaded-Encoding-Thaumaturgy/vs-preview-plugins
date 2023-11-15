@@ -20,7 +20,6 @@ from vspreview.core.vsenv import Runner
 from vspreview.main import MainWindow
 from vspreview.models import GeneralModel
 from vspreview.plugins import AbstractPlugin, PluginConfig
-from vsscale import fdescale_args
 from vstools import (
     ClipFramesCache, ClipsCache, Colorspace, DynamicClipsCache, Matrix, R, T, clip_data_gather, complex_hash, core,
     depth, get_w, get_y, mod2, padder, plane, vs, vs_object
@@ -827,7 +826,7 @@ class RescaleErrorAnalyzer(ExtendedWidget):
             wclip = self.workclips[self.main.current_output.source.clip]
 
             attempts = [
-                ((x * wclip.width / wclip.height, x) if 'h' in rescale_mode else (x, x / wclip.width / wclip.height, ))
+                ((x * wclip.width / wclip.height, x) if 'h' in rescale_mode else (x, x / wclip.width * wclip.height))
                 for x in [
                     round(cast(float, val), decimals)
                     for val in np.arange(start, stop + step, step) if round(val, decimals) <= stop
