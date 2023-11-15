@@ -617,7 +617,7 @@ class RescaleErrorAnalyzer(ExtendedWidget):
         self.width_max_spinbox = SpinBox(None, 0, None, 'px')
 
         self.step_spinbox = DoubleSpinBox(
-            value=1.0, minimum=0.001, maximum=1.0, singleStep=0.05,
+            value=1.0, minimum=0.001, maximum=1.0, decimals=3,
             stepType=DoubleSpinBox.StepType.AdaptiveDecimalStepType
         )
 
