@@ -1,45 +1,80 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Callable
+from concurrent.futures import ThreadPoolExecutor
+from math import floor
+from threading import Timer
+from typing import Any, Callable, Sequence, cast
 
-from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QFrame, QLabel, QWidget
-from vstools import ClipFramesCache, ClipsCache, depth, mod2, padder, plane, vs
-
-from vspreview.core import (
-    CroppingInfo, DoubleSpinBox, Frame, HBoxLayout, PlotMouseEvent, PlottingCanvas, SpinBox, Switch, VBoxLayout
+import numpy as np
+from PyQt6.QtCore import QObject, Qt, QThreadPool, pyqtSignal
+from PyQt6.QtWidgets import QFrame, QLabel, QTabWidget, QWidget
+from scipy.fft import dct  # type: ignore
+from scipy.signal import argrelextrema  # type: ignore
+from vskernels import (
+    AdobeBicubic, Bicubic, BicubicSharp, Bilinear, Catrom, FFmpegBicubic, Hermite, Kernel, KernelT, Lanczos, Mitchell
 )
+from vspreview.core import (
+    ComboBox, CroppingInfo, DoubleSpinBox, ExtendedWidget, Frame, HBoxLayout, PlotMouseEvent,
+    PlottingCanvasDefaultFrame, ProgressBar, PushButton, SpinBox, Stretch, Switch, VBoxLayout, main_window
+)
+from vspreview.core.vsenv import Runner
 from vspreview.main import MainWindow
+from vspreview.models import GeneralModel
 from vspreview.plugins import AbstractPlugin, PluginConfig
-
-if TYPE_CHECKING:
-    import numpy as np
+from vsscale import fdescale_args
+from vstools import (
+    ClipFramesCache, ClipsCache, Colorspace, DynamicClipsCache, Matrix, R, T, clip_data_gather, complex_hash, core,
+    depth, get_y, mod2, padder, plane, vs, vs_object
+)
 
 __all__ = [
     'NativeResolutionPlugin'
 ]
 
+common_kernels = [
+    # Bicubic
+    Catrom(),
+    Mitchell(),
+    Hermite(),
+    BicubicSharp(),
+    FFmpegBicubic(),
+    AdobeBicubic(),
+    # Lanczos
+    Lanczos(2),
+    Lanczos(3),
+    Lanczos(4),
+    # Other
+    Bilinear()
+]
 
-class PluginCanvas(PlottingCanvas):
-    def __init__(self, plugin: NativeResolutionPlugin) -> None:
+
+def get_kernel_name(kernel: KernelT) -> str:
+    name = kernel.__class__.__name__
+
+    if name.lower().endswith('bicubic'):
+        name = name[:-len('bicubic')]
+
+    if isinstance(kernel, Bicubic):
+        def _e(x: int | float) -> str:
+            return str(int(x)) if float(x).is_integer() else f'{x:.2f}'
+        name += f" (b={_e(kernel.b)}, c={_e(kernel.c)})"
+    elif isinstance(kernel, Lanczos):
+        name += f" (taps={kernel.taps})"
+
+    return name
+
+
+class FrequencyCanvas(PlottingCanvasDefaultFrame):
+    def __init__(self, plugin: FrequencyAnalyzer) -> None:
         super().__init__(plugin.main, True, False, True, 5)
 
         self.plugin = plugin
-
-    def render(self, frame: Frame | None = None, set_lims: bool = True) -> None:
-        if not self.main.current_output:
-            return
-
-        if frame is None:
-            frame = self.main.current_output.last_showed_frame
-
-        super().render(frame, set_lims)
 
     def on_mouse_moved(self, event: PlotMouseEvent) -> None:
         width_check = self.plugin.size_switch.isChecked()
 
         self.plugin.position.setText(
-            f'{"Width" if width_check else "Height"}: {int(event.xdata)}, Error: {event.ydata:.3f}'
+            f'{"Width" if width_check else "Height"}: {int(event.xdata)}, Error: {self.axes.lines[0].get_ydata()[int(event.xdata)]:.3f}'
         )
 
     def _render(self, frame: Frame) -> None:
@@ -51,7 +86,7 @@ class PluginCanvas(PlottingCanvas):
         current_size = 'Width' if self.plugin.size_switch.isChecked() else 'Height'
         opposite_size = 'Height' if self.plugin.size_switch.isChecked() else 'Width'
 
-        results_text = 'Results: '
+        results_text = 'Spikes: '
         if len(inter_norm):
             results_text += ', '.join(map(str, sorted(set(inter_norm))))
         else:
@@ -69,11 +104,11 @@ class PluginCanvas(PlottingCanvas):
                 )
 
 
-class NativeResolutionPlugin(AbstractPlugin, QWidget):
-    _config = PluginConfig('dev.setsugen.native_resolution', 'Native Resolution')
-
+class FrequencyAnalyzer(ExtendedWidget):
     def __init__(self, main: MainWindow) -> None:
-        super().__init__(main)
+        super().__init__()
+
+        self.main = main
 
         self.clip_cache = ClipsCache()
         self.cropped_clip_cache = ClipsCache()
@@ -100,7 +135,7 @@ class NativeResolutionPlugin(AbstractPlugin, QWidget):
         self.results.setMaximumHeight(25)
         self.position.setMaximumHeight(25)
 
-        self.canvas = PluginCanvas(self)
+        self.canvas = FrequencyCanvas(self)
 
         self.size_switch = Switch(
             12, 40, 1, ('Height', 'Width', 2), checked=False, clicked=self.on_size_to_check_change
@@ -162,11 +197,6 @@ class NativeResolutionPlugin(AbstractPlugin, QWidget):
         ])
 
         self.main.cropValuesChanged.connect(self.on_crop_changed)
-
-    def add_shortcuts(self) -> None:
-        self.add_shortcut(
-            Qt.Key.Key_Escape, lambda: self.underMouse() and self.canvas.render(None, False)  # type: ignore
-        )
 
     @property
     def curr_clip(self) -> vs.VideoNode:
@@ -314,9 +344,7 @@ class NativeResolutionPlugin(AbstractPlugin, QWidget):
         if generic:
             del self.clip_cache[self.curr_clip]
 
-    def get_dct_value(self, frame_num: int) -> tuple[Any, Any, Any | None]:
-        import numpy as np
-        from scipy.fft import dct  # type: ignore
+    def get_dct_value(self, frame_num: int) -> tuple[Any, Any, Any | None]:  # type: ignore
 
         cut_clip = self.crop_clip
         up_scale = self.filter_rate_spinbox.value()
@@ -373,19 +401,602 @@ class NativeResolutionPlugin(AbstractPlugin, QWidget):
         return dct_v, dct_cross, dct_up
 
     def get_inter(self, dct: np.array, dct_up: np.array, min_val: int, max_val: int) -> list[int]:
-        import numpy as np
-        from scipy.signal import argrelextrema  # type: ignore
-
         max_index = argrelextrema(dct, np.less, order=self.check_radius)[0]
         min_index = argrelextrema(dct, np.greater, order=self.check_radius)[0]
 
         if dct_up is not None:
-            max_index_up = argrelextrema(dct_up[:dct.shape[0]], np.less, order=self.check_radius)[0]
+            max_index_up = argrelextrema(dct_up[:dct.shape[0]], np.less, order=self.check_radius)[0]  # type: ignore
             min_index_up = argrelextrema(dct_up[:dct.shape[0]], np.greater, order=self.check_radius)[0]
         else:
-            max_index_up = min_index_up = []
+            max_index_up = min_index_up = []  # type: ignore
 
-        return np.array([
+        return np.array([  # type: ignore
             x for x in (*max_index, *min_index)
             if (min_val < x < max_val) and x not in max_index_up and x not in min_index_up
         ])
+
+    def init_outputs(self) -> None:
+        assert self.main.outputs
+
+
+class RescaleWorkClip(DynamicClipsCache[vs.VideoNode]):
+    def get_clip(self, key: vs.VideoNode) -> vs.VideoNode:
+        return get_y(Colorspace.YUV(depth(key, 32), matrix_in=Matrix.from_video(key), matrix=Matrix.BT709))
+
+
+class RescaleErrorRunner(QObject):
+    error_step = pyqtSignal()
+    update = pyqtSignal(int)
+    finished = pyqtSignal()
+
+    def __init__(
+        self, analyzer: RescaleErrorAnalyzer, clip: vs.VideoNode, frame: int, is_integer: bool,
+        attempts: Sequence[tuple[float, float]], mode: str, kernel: Kernel
+    ) -> None:
+        super().__init__()
+
+        self.analyzer = analyzer
+        self.clip = clip
+        self.frame = frame
+        self.is_integer = is_integer
+        self.attempts = attempts
+        self.mode = mode
+        self.kernel = kernel
+
+    def run(self) -> None:
+        rescaled_clips = self.analyzer.clips_cache[(self.clip, self.attempts, self.kernel, self.is_integer, self.mode)]
+
+        rescaled_clip = self.clip.std.BlankClip(length=len(self.attempts)).std.FrameEval(lambda n: rescaled_clips[n][self.frame])
+
+        rescaled_clip = core.std.Expr(
+            [self.clip[self.frame] * len(self.attempts), rescaled_clip],
+            'x y - 2 pow' if True else 'x y - abs dup 0.015 > swap 0 ?'
+        )
+        rescaled_clip = rescaled_clip.std.CropRel(10, 10, 10, 10).std.PlaneStats()
+
+        self.error_step.emit()
+
+        errors = clip_data_gather(  # type: ignore
+            rescaled_clip,
+            lambda i, n: self.update.emit(int(i / n * 100)),
+            lambda n, f: cast(float, f.props.PlaneStatsAverage)
+        )
+
+        attempt_idx = 0 if 'h' not in self.mode else 1
+
+        self.data = cast(tuple[list[float], list[float]], ([x[attempt_idx] for x in self.attempts], errors))
+
+        self.finished.emit()
+        self.deleteLater()
+
+
+class RescaleErrorCanvas(PlottingCanvasDefaultFrame):
+    def __init__(self, plugin: RescaleErrorAnalyzer) -> None:
+        self.plugin = plugin
+
+        super().__init__(plugin.main, True, False, True, 5)
+
+    def on_mouse_moved(self, event: PlotMouseEvent) -> None:
+        attempts = self.axes.lines[0].get_xdata()
+        errors = self.axes.lines[0].get_ydata()
+
+        width_check = 'h' not in self.plugin.rescale_mode
+
+        close_error = [(i, abs(x - event.xdata)) for i, x in enumerate(attempts)]
+        close_error.sort(key=lambda v: v[1])
+
+        error_idx = close_error[0][0]
+
+        self.plugin.position.setText(
+            f'{"Width" if width_check else "Height"}: {attempts[error_idx]:.{self.plugin.step_decimals}f}, Error: {errors[error_idx]:.16f}'
+        )
+
+    def _render(self, frame: Frame) -> None:  # type: ignore
+        self.plugin.set_visibility(False, False, True)
+
+        assert (data := self.plugin.current_data[self.plugin.main.current_output.index][int(frame)])
+
+        attempts, errors = map(np.array, data)
+
+        order = 10 * floor(1 / self.plugin.step_spinbox.value())
+
+        min_indices = argrelextrema(errors, np.less, order=order)[0]
+
+        self.axes.plot(attempts, errors, label='Error')
+
+        if len(min_indices):
+            self.axes.scatter(attempts[min_indices], errors[min_indices], linewidth=0.3, s=50, c='r')
+
+        best_arr = [(attempts[i], errors[i]) for i in min_indices]
+        best_arr.sort(key=lambda v: v[1])
+        best_arr = best_arr[:5]
+
+        best_indices = ', '.join(map(str, (x[0] for x in best_arr))) or 'None'
+
+        self.plugin.results.setText(f'Spikes: {best_indices}')
+
+
+class DynamicDataCache(vs_object, dict[T, R]):
+    def __init__(self, cache_size: int = 2) -> None:
+        self.cache_size = cache_size
+
+    def get_data(self, key: T) -> R:
+        raise NotImplementedError
+
+    def __getitem__(self, args: T, /) -> R:
+        __key = complex_hash.hash(args)
+
+        if __key not in self:
+            self[__key] = self.get_data(args)  # type: ignore
+
+            if len(self) > self.cache_size:
+                del self[next(iter(self.keys()))]
+
+        return super().__getitem__(__key)  # type: ignore
+
+    def __vs_del__(self, core_id: int) -> None:
+        self.clear()
+
+
+class RescaleErrorClipCache(
+    DynamicDataCache[tuple[vs.VideoNode, Sequence[tuple[float, float]], Kernel, bool, str], list[vs.VideoNode]]
+):
+    def get_data(self, args: tuple[vs.VideoNode, Sequence[tuple[float, float]], Kernel, bool, str]) -> list[vs.VideoNode]:
+        clip, attempts, kernel, is_integer, mode = args
+
+        if is_integer:
+            attempts_int = cast(list[tuple[int, int]], attempts)
+
+            def _gen_clips(n: int) -> vs.VideoNode:
+                return kernel.scale(kernel.descale(clip, *attempts_int[n]), clip.width, clip.height)
+        else:
+            def _gen_clips(n: int) -> vs.VideoNode:
+                dscale, rscale = fdescale_args(
+                    clip, attempts[n][1], base_height=None, base_width=None, mode=mode, up_rate=1.0
+                )
+
+                descaled = kernel.descale(clip, **dscale)
+
+                return kernel.scale(descaled, clip.width, clip.height, **rscale)
+
+        with ThreadPoolExecutor(max_workers=main_window().settings.usable_cpus_count) as executor:
+            rescaled_clips = list(executor.map(_gen_clips, range(len(attempts))))
+
+        return rescaled_clips
+
+
+class RescaleErrorAnalyzer(ExtendedWidget):
+    def __init__(self, main: MainWindow) -> None:
+        super().__init__()
+
+        self.main = main
+
+        self.workers_lookup = dict[int, dict[Frame, RescaleErrorRunner]]()
+        self.workclips = RescaleWorkClip()
+        self.clips_cache = RescaleErrorClipCache(10)
+        self.minmax_values = dict[tuple[int, int], tuple[int, int, int, int]]()
+        self.current_datas = dict[int, list[dict[int, tuple[list[float], list[float]] | None]]]()
+
+        self.last_edit_timer: Timer | None = None
+
+        self.render_lock = False
+
+    def setup_ui(self) -> None:
+        # Controls
+        self.controls = QWidget()
+
+        self.sizes_to_check_combobox = ComboBox[str](
+            model=GeneralModel[str](['Width & Height', 'Height', 'Width'], False),
+            currentIndex=0, sizeAdjustPolicy=ComboBox.SizeAdjustPolicy.AdjustToContents
+        )
+        self.kernels_combobox = ComboBox[str](
+            model=GeneralModel[str](list(map(get_kernel_name, common_kernels)), False),
+            currentIndex=0, sizeAdjustPolicy=ComboBox.SizeAdjustPolicy.AdjustToContents
+        )
+
+        self.sizes_to_check_combobox.currentIndexChanged.connect(self.on_size_to_check_change)
+
+        self.min_max_label = QLabel()
+
+        self.height_min_spinbox = SpinBox(None, 0, None, 'px')
+        self.height_max_spinbox = SpinBox(None, 0, None, 'px')
+
+        self.width_min_spinbox = SpinBox(None, 0, None, 'px')
+        self.width_max_spinbox = SpinBox(None, 0, None, 'px')
+
+        self.step_spinbox = DoubleSpinBox(
+            value=1.0, minimum=0.001, maximum=1.0, singleStep=0.05,
+            stepType=DoubleSpinBox.StepType.AdaptiveDecimalStepType
+        )
+
+        self.update_button = PushButton('Update', clicked=lambda _: self.render_canvas())
+
+        HBoxLayout(self.controls, [
+            VBoxLayout([
+                QLabel('Sizes to check'),
+                self.sizes_to_check_combobox,
+            ]),
+            VBoxLayout([
+                self.min_max_label,
+                HBoxLayout([
+                    self.height_min_spinbox, self.height_max_spinbox,
+                    self.width_min_spinbox, self.width_max_spinbox,
+                ])
+            ]),
+            VBoxLayout([
+                QLabel('Step'),
+                self.step_spinbox
+            ]),
+            VBoxLayout([
+                QLabel('Kernel'),
+                self.kernels_combobox
+            ]),
+            Stretch(),
+            self.update_button
+        ])
+
+        self.on_size_to_check_change()
+
+        self.controls.setFixedHeight(80)
+
+        self.sizes_to_check_combobox.currentIndexChanged.connect(self.render_callback)
+        self.kernels_combobox.currentIndexChanged.connect(self.render_callback)
+
+        # Loading
+        self.errors_loading = QWidget()
+
+        self.errors_progress = ProgressBar(self, value=0)
+        self.errors_progress.setGeometry(200, 80, 250, 20)
+
+        VBoxLayout(self.errors_loading, [
+            Stretch(),
+            QLabel('Calculating errors...'),
+            self.errors_progress,
+            Stretch()
+        ])
+
+        # Rescale Clip Loading
+        self.rescale_loading = QWidget()
+
+        self.rescale_progress = ProgressBar(self, value=0, minimum=0, maximum=0)
+        self.rescale_progress.setGeometry(200, 80, 250, 20)
+
+        VBoxLayout(self.rescale_loading, [
+            Stretch(),
+            QLabel('Creating rescaled clip...'),
+            self.rescale_progress,
+            Stretch()
+        ])
+
+        # Display
+        self.display = QWidget()
+
+        self.results = QLabel()
+        self.position = QLabel()
+
+        font = self.results.font()
+        font.setPixelSize(15)
+
+        self.results.setFont(font)
+        self.position.setFont(font)
+
+        self.results.setMaximumHeight(25)
+        self.position.setMaximumHeight(25)
+
+        self.canvas = RescaleErrorCanvas(self)
+
+        VBoxLayout(self.display, [
+            VBoxLayout([
+                self.results,
+                self.position
+            ]),
+            self.canvas, self.canvas.controls
+        ])
+
+        # Final
+        self.vlayout = VBoxLayout(self, [
+            self.controls,
+            self.rescale_loading,
+            self.errors_loading,
+            self.display
+        ])
+
+        self.set_visibility(False, False, False)
+
+    def set_visibility(self, rescale: bool, errors: bool, display: bool) -> None:
+        if rescale or errors or display:
+            if self.vlayout.alignment():
+                self.vlayout.setAlignment(Qt.AlignmentFlag(0))
+        else:
+            self.vlayout.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        self.rescale_loading.setVisible(rescale)
+        self.errors_loading.setVisible(errors)
+        self.display.setVisible(display)
+
+    def on_size_to_check_change(self) -> None:
+        do_width = 'Height' not in self.sizes_to_check_combobox.currentData()
+
+        if do_width:
+            self.width_min_spinbox.show()
+            self.width_max_spinbox.show()
+
+            self.height_min_spinbox.hide()
+            self.height_max_spinbox.hide()
+
+            self.min_max_label.setText('Min/Max width checked')
+        else:
+            self.width_min_spinbox.hide()
+            self.width_max_spinbox.hide()
+
+            self.height_min_spinbox.show()
+            self.height_max_spinbox.show()
+
+            self.min_max_label.setText('Min/Max height checked')
+
+    @property
+    def curr_clip(self) -> vs.VideoNode:
+        assert self.main.outputs
+        return self.main.outputs._items[self.main.current_output.index].source.clip
+
+    def on_current_output_changed(self, index: int, prev_index: int) -> None:
+        assert self.main.outputs
+
+        self.render_lock = True
+
+        old_node = self.main.outputs[prev_index].source.clip
+
+        old_key = (old_node.width, old_node.height)
+        new_key = (self.curr_clip.width, self.curr_clip.height)
+
+        if old_key in self.minmax_values:
+            self.minmax_values[old_key] = (
+                self.height_min_spinbox.value(),
+                self.height_max_spinbox.value(),
+                self.width_min_spinbox.value(),
+                self.width_max_spinbox.value(),
+            )
+
+        if new_key not in self.minmax_values:
+            if self.curr_clip.width < 1400:
+                lrate, hrate = 0.0, 0.0
+            else:
+                lrate, hrate = 0.465, 0.925
+
+            self.minmax_values[new_key] = (
+                int(self.curr_clip.height * lrate), int(self.curr_clip.height * hrate),
+                int(self.curr_clip.width * lrate), int(self.curr_clip.width * hrate)
+            )
+
+        self.height_min_spinbox.setMaximum(int(self.curr_clip.height * 0.9))
+        self.height_max_spinbox.setMaximum(self.curr_clip.height)
+        self.width_min_spinbox.setMaximum(int(self.curr_clip.width * 0.9))
+        self.width_max_spinbox.setMaximum(self.curr_clip.width)
+
+        hmin, hmax, wmin, wmax = self.minmax_values[new_key]
+
+        self.height_min_spinbox.setValue(hmin)
+        self.height_max_spinbox.setValue(hmax)
+        self.width_min_spinbox.setValue(wmin)
+        self.width_max_spinbox.setValue(wmax)
+
+        self.render_lock = False
+
+    def render_callback(self) -> None:
+        self.safe_render()
+
+    def render_canvas(self, frame: Frame | None = None) -> None:
+        if self.render_lock:
+            return
+
+        if frame is None:
+            frame = self.main.current_output.last_showed_frame
+
+        if self.current_data[self.main.current_output.index][int(frame)] is not None:
+            self.canvas.render(frame, True)
+            return
+
+        if frame not in self.workers:
+            self.set_visibility(True, False, False)
+
+            rescale_mode, start, stop, step, decimals = (*self._get_values(), self.step_decimals)
+
+            wclip = self.workclips[self.main.current_output.source.clip]
+
+            attempts = [
+                ((x * wclip.width / wclip.height, x) if 'h' in rescale_mode else (x, x / wclip.width / wclip.height, ))
+                for x in [
+                    round(cast(float, val), decimals)
+                    for val in np.arange(start, stop + step, step) if round(val, decimals) <= stop
+                ]
+            ]
+
+            if not decimals:
+                attempts = [(round(w, 0), round(h, 0)) for w, h in attempts]
+
+            self.workers[frame] = RescaleErrorRunner(
+                self, wclip, int(frame), decimals == 0, attempts, rescale_mode, self.kernel
+            )
+
+            self.workers[frame].error_step.connect(self.error_step_hook(frame, self.main.current_output.index))
+            self.workers[frame].update.connect(self.progress_hook(frame, self.main.current_output.index))
+            self.workers[frame].finished.connect(self.render_hook(frame, self.main.current_output.index))
+
+            QThreadPool.globalInstance().start(Runner(self.workers[frame].run))
+
+    def safe_render(self, frame: Frame | None = None) -> None:
+        if not (self.errors_loading.isVisible() or self.display.isVisible()):
+            return
+
+        self.render_canvas(frame)
+
+    def on_current_frame_changed(self, frame: Frame | None = None) -> None:
+        self.safe_render()
+
+    def error_step_hook(self, frame: Frame, out_idx: int) -> Callable[[], None]:
+        def _callback() -> None:
+            if (frame, out_idx) == (
+                self.main.current_output.last_showed_frame, self.main.current_output.index
+            ):
+                self.set_visibility(False, True, False)
+
+        return _callback
+
+    def render_hook(self, frame: Frame, out_idx: int) -> Callable[[], None]:
+        def _callback() -> None:
+            if frame not in self.workers:
+                return
+
+            self.current_data[out_idx][int(frame)] = self.workers[frame].data
+
+            if (frame, out_idx) == (
+                self.main.current_output.last_showed_frame, self.main.current_output.index
+            ):
+                self.canvas.render(frame, True)
+
+            if frame in self.workers:
+                del self.workers[frame]
+
+        return _callback
+
+    def progress_hook(self, frame: Frame, out_idx: int) -> Callable[[int], None]:
+        def _callback(update: int) -> None:
+            if (frame, out_idx) == (
+                self.main.current_output.last_showed_frame, self.main.current_output.index
+            ):
+                if not self.errors_progress.isVisible():
+                    self.set_visibility(False, True, False)
+
+                self.errors_progress.setValue(update)
+
+        return _callback
+
+    @property
+    def rescale_mode(self) -> str:
+        return ('wh', 'h', 'w')[self.sizes_to_check_combobox.currentIndex()]
+
+    @property
+    def step_decimals(self) -> int:
+        *_, step = self._get_values()
+        if step.is_integer():
+            return 0
+        return max(str(step)[::-1].find("."), 0)
+
+    def _get_values(self) -> tuple[str, float, float, float]:
+        if 'h' in self.rescale_mode:
+            start = self.height_min_spinbox.value()
+            stop = self.height_max_spinbox.value()
+        else:
+            start = self.width_min_spinbox.value()
+            stop = self.width_max_spinbox.value()
+
+        step = self.step_spinbox.value()
+
+        return self.rescale_mode, start, stop, step
+
+    @property
+    def kernel(self) -> Kernel:
+        return common_kernels[self.kernels_combobox.currentIndex()]
+
+    @property
+    def workers(self) -> dict[Frame, RescaleErrorRunner]:
+        key = complex_hash.hash(*self._get_values(), self.kernel)
+
+        if key not in self.workers_lookup:
+            self.workers_lookup[key] = dict[Frame, RescaleErrorRunner]()
+
+        return self.workers_lookup[key]
+
+    @property
+    def current_data(self) -> list[dict[int, tuple[list[float], list[float]] | None]]:
+        assert self.main.outputs
+
+        key = complex_hash.hash(*self._get_values(), self.kernel)
+
+        if key not in self.current_datas:
+            self.current_datas[key] = [
+                {i: None for i in range(out.source.clip.num_frames)}
+                for out in self.main.outputs
+            ]
+
+        return self.current_datas[key]
+
+    def init_outputs(self) -> None:
+        self.current_datas.clear()
+
+
+# class KernelAnalyzer(ExtendedWidget):
+#     def __init__(self, main: MainWindow) -> None:
+#         super().__init__()
+
+#         self.main = main
+
+#     def on_current_frame_changed(self, frame: Frame) -> None:
+#         # self.canvas.render(frame, True)
+#         ...
+
+#     def on_current_output_changed(self, index: int, prev_index: int) -> None:
+#         ...
+
+#     def init_outputs(self) -> None:
+#         assert self.main.outputs
+
+
+class NativeResolutionPlugin(AbstractPlugin, QTabWidget):
+    _config = PluginConfig('dev.setsugen.native_resolution', 'Native Resolution')
+
+    def __init__(self, main: MainWindow) -> None:
+        super().__init__(main)
+
+        self.rescale = RescaleErrorAnalyzer(main)
+        self.dft = FrequencyAnalyzer(main)
+        # self.kernel = KernelAnalyzer(main)
+
+        self.addTab(self.rescale, 'Rescale Error Analyze')
+        self.addTab(self.dft, 'Frequency Analyze')
+        # self.addTab(self.kernel, 'Kernel Analyze')
+
+        self.modes = (self.rescale, self.dft)  # , self.kernel)
+        self.cache = [(-1, -1)] * len(self.modes)
+
+        self.currentChanged.connect(self.on_tab_change)
+
+    def setup_ui(self) -> None:
+        for mode in self.modes:
+            mode.setup_ui()
+
+    def add_shortcuts(self) -> None:
+        self.add_shortcut(
+            Qt.Key.Key_Escape, lambda: self.underMouse() and self.modes[self.currentIndex()].canvas.render(None, False)  # type: ignore
+        )
+        self.add_shortcut(
+            Qt.Key.Key_Enter, lambda: self.underMouse() and self.currentIndex() == 0 and self.rescale.render_canvas()  # type: ignore
+        )
+        self.add_shortcut(
+            Qt.Key.Key_Return, lambda: self.underMouse() and self.currentIndex() == 0 and self.rescale.render_canvas()  # type: ignore
+        )
+
+    def init_outputs(self) -> None:
+        assert self.main.outputs
+
+        for mode in self.modes:
+            mode.init_outputs()  # type: ignore
+
+    def on_tab_change(self) -> None:
+        idx, key = self.currentIndex(), (
+            int(self.main.current_output.last_showed_frame), self.main.current_output.index
+        )
+        if self.cache[idx] != key:
+            if self.cache[idx][1] != key[1]:
+                self.modes[idx].on_current_output_changed(key[1], self.cache[idx][1])
+            self.modes[idx].on_current_frame_changed(self.main.current_output.last_showed_frame)
+
+    def on_current_frame_changed(self, frame: Frame) -> None:
+        idx = self.currentIndex()
+        self.modes[idx].on_current_frame_changed(frame)
+        self.cache[idx] = (int(frame), self.main.current_output.index)
+
+    def on_current_output_changed(self, index: int, prev_index: int) -> None:
+        idx = self.currentIndex()
+        self.modes[idx].on_current_output_changed(index, prev_index)
+        self.cache[idx] = (int(self.main.current_output.last_showed_frame), index)
