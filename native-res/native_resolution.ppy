@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
-from math import floor
+from math import ceil, floor
 from threading import Timer
 from typing import Any, Callable, Sequence, cast
 
@@ -15,7 +14,7 @@ from vskernels import (
 )
 from vspreview.core import (
     ComboBox, CroppingInfo, DoubleSpinBox, ExtendedWidget, Frame, HBoxLayout, PlotMouseEvent,
-    PlottingCanvasDefaultFrame, ProgressBar, PushButton, SpinBox, Stretch, Switch, VBoxLayout, main_window
+    PlottingCanvasDefaultFrame, ProgressBar, PushButton, SpinBox, Stretch, Switch, VBoxLayout
 )
 from vspreview.core.vsenv import Runner
 from vspreview.main import MainWindow
@@ -24,7 +23,7 @@ from vspreview.plugins import AbstractPlugin, PluginConfig
 from vsscale import fdescale_args
 from vstools import (
     ClipFramesCache, ClipsCache, Colorspace, DynamicClipsCache, Matrix, R, T, clip_data_gather, complex_hash, core,
-    depth, get_y, mod2, padder, plane, vs, vs_object
+    depth, get_w, get_y, mod2, padder, plane, vs, vs_object
 )
 
 __all__ = [
@@ -552,24 +551,31 @@ class RescaleErrorClipCache(
         clip, attempts, kernel, is_integer, mode = args
 
         if is_integer:
-            attempts_int = cast(list[tuple[int, int]], attempts)
-
-            def _gen_clips(n: int) -> vs.VideoNode:
-                return kernel.scale(kernel.descale(clip, *attempts_int[n]), clip.width, clip.height)
+            def _gen_clip_from_attempt(attempt: tuple[Any, Any]) -> vs.VideoNode:
+                return kernel.scale(kernel.descale(clip, *attempt), clip.width, clip.height)
         else:
-            def _gen_clips(n: int) -> vs.VideoNode:
-                dscale, rscale = fdescale_args(
-                    clip, attempts[n][1], base_height=None, base_width=None, mode=mode, up_rate=1.0
-                )
+            def _gen_clip_from_attempt(attempt: tuple[Any, Any]) -> vs.VideoNode:
+                src_width, src_height = attempt
 
-                descaled = kernel.descale(clip, **dscale)
+                base_height = mod2(ceil(src_height))
+                base_width = get_w(base_height, clip, 2)
 
-                return kernel.scale(descaled, clip.width, clip.height, **rscale)
+                do_h, do_w = 'h' in mode, 'w' in mode
 
-        with ThreadPoolExecutor(max_workers=main_window().settings.usable_cpus_count) as executor:
-            rescaled_clips = list(executor.map(_gen_clips, range(len(attempts))))
+                width = (base_width - 2 * floor((base_width - src_width) / 2)) if do_w else clip.width
+                height = (base_height - 2 * floor((base_height - src_height) / 2)) if do_h else clip.height
 
-        return rescaled_clips
+                de_args = dict[str, Any]()
+
+                if do_h:
+                    de_args.update(src_height=src_height, src_top=(height - src_height) / 2)
+
+                if do_w:
+                    de_args.update(src_width=src_width, src_left=(width - src_width) / 2)
+
+                return kernel.scale(kernel.descale(clip, width, height, **de_args), clip.width, clip.height, **de_args)
+
+        return list(map(_gen_clip_from_attempt, attempts))
 
 
 class RescaleErrorAnalyzer(ExtendedWidget):
