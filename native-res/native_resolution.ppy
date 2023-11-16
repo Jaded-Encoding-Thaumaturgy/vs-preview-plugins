@@ -22,7 +22,7 @@ from vspreview.models import GeneralModel
 from vspreview.plugins import AbstractPlugin, PluginConfig
 from vstools import (
     ClipFramesCache, ClipsCache, Colorspace, DynamicClipsCache, Matrix, R, T, clip_data_gather, complex_hash, core,
-    depth, get_w, get_y, mod2, padder, plane, vs, vs_object
+    depth, get_y, mod2, padder, plane, vs, vs_object
 )
 
 __all__ = [
@@ -451,8 +451,6 @@ class RescaleErrorRunner(QObject):
             metric_expr = 'x y - abs'
         elif self.metric_mode == 1:
             metric_expr = 'x y - 2 pow'
-        elif self.metric_mode == 2:
-            metric_expr = 'x y - 2 pow sqrt'
         else:
             raise RuntimeError
 
@@ -461,7 +459,7 @@ class RescaleErrorRunner(QObject):
 
         self.error_step.emit()
 
-        errors = clip_data_gather(  # type: ignore
+        errors = clip_data_gather(
             rescaled_clip,
             lambda i, n: self.update.emit(int(i / n * 100)),
             lambda n, f: cast(float, f.props.PlaneStatsAverage)
@@ -553,13 +551,14 @@ class RescaleErrorClipCache(
             def _gen_clip_from_attempt(attempt: tuple[Any, Any]) -> vs.VideoNode:
                 return kernel.scale(kernel.descale(clip, *attempt), clip.width, clip.height)
         else:
+            clip_ar = clip.width / clip.height
+            do_h, do_w = 'h' in mode, 'w' in mode
+
             def _gen_clip_from_attempt(attempt: tuple[Any, Any]) -> vs.VideoNode:
                 src_width, src_height = attempt
 
                 base_height = mod2(ceil(src_height))
-                base_width = get_w(base_height, clip, 2)
-
-                do_h, do_w = 'h' in mode, 'w' in mode
+                base_width = mod2(base_height * clip_ar)
 
                 width = (base_width - 2 * floor((base_width - src_width) / 2)) if do_w else clip.width
                 height = (base_height - 2 * floor((base_height - src_height) / 2)) if do_h else clip.height
@@ -622,7 +621,7 @@ class RescaleErrorAnalyzer(ExtendedWidget):
         )
 
         self.metric_type_combobox = ComboBox[str](
-            model=GeneralModel[str](['MAE', 'MSE', 'RMSE'], False),
+            model=GeneralModel[str](['MAE', 'MSE'], False),
             currentIndex=1, sizeAdjustPolicy=ComboBox.SizeAdjustPolicy.AdjustToContents
         )
 
