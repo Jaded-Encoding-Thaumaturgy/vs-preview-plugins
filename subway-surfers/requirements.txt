@@ -1,0 +1,1 @@
+PyQt6-WebEngine>=6.5.2
