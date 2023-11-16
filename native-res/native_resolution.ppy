@@ -22,7 +22,7 @@ from vspreview.models import GeneralModel
 from vspreview.plugins import AbstractPlugin, PluginConfig
 from vstools import (
     ClipFramesCache, ClipsCache, Colorspace, DynamicClipsCache, Matrix, R, T, clip_data_gather, complex_hash, core,
-    depth, get_y, mod2, padder, plane, vs, vs_object
+    depth, get_y, mod2, padder, plane, vs, vs_object, FieldBased
 )
 
 __all__ = [
@@ -428,8 +428,9 @@ class RescaleErrorRunner(QObject):
     finished = pyqtSignal()
 
     def __init__(
-        self, analyzer: RescaleErrorAnalyzer, clip: vs.VideoNode, frame: int, is_integer: bool,
-        attempts: Sequence[tuple[float, float]], mode: str, metric_mode: int, kernel: Kernel
+        self, analyzer: RescaleErrorAnalyzer, clip: vs.VideoNode, frame: int,
+        is_integer: bool, attempts: Sequence[tuple[float, float]], mode: str,
+        metric_mode: int, kernel: Kernel, field_based: FieldBased
     ) -> None:
         super().__init__()
 
@@ -441,9 +442,12 @@ class RescaleErrorRunner(QObject):
         self.mode = mode
         self.metric_mode = metric_mode
         self.kernel = kernel
+        self.field_based = field_based
 
     def run(self) -> None:
-        rescaled_clips = self.analyzer.clips_cache[(self.clip, self.attempts, self.kernel, self.is_integer, self.mode)]
+        rescaled_clips = self.analyzer.clips_cache[
+            (self.clip, self.attempts, self.kernel, self.is_integer, self.mode, self.field_based)
+        ]
 
         rescaled_clip = self.clip.std.BlankClip(length=len(self.attempts)).std.FrameEval(lambda n: rescaled_clips[n][self.frame])
 
@@ -541,15 +545,17 @@ class DynamicDataCache(vs_object, dict[T, R]):
         self.clear()
 
 
-class RescaleErrorClipCache(
-    DynamicDataCache[tuple[vs.VideoNode, Sequence[tuple[float, float]], Kernel, bool, str], list[vs.VideoNode]]
-):
-    def get_data(self, args: tuple[vs.VideoNode, Sequence[tuple[float, float]], Kernel, bool, str]) -> list[vs.VideoNode]:
-        clip, attempts, kernel, is_integer, mode = args
+class RescaleErrorClipCache(DynamicDataCache[
+    tuple[vs.VideoNode, Sequence[tuple[float, float]], Kernel, bool, str, FieldBased], list[vs.VideoNode]
+]):
+    def get_data(
+        self, args: tuple[vs.VideoNode, Sequence[tuple[float, float]], Kernel, bool, str, FieldBased]
+    ) -> list[vs.VideoNode]:
+        clip, attempts, kernel, is_integer, mode, field_based = args
 
         if is_integer:
             def _gen_clip_from_attempt(attempt: tuple[Any, Any]) -> vs.VideoNode:
-                return kernel.scale(kernel.descale(clip, *attempt), clip.width, clip.height)
+                return kernel.scale(kernel.descale(clip, *attempt, field_based=field_based), clip.width, clip.height)
         else:
             clip_ar = clip.width / clip.height
             do_h, do_w = 'h' in mode, 'w' in mode
@@ -563,7 +569,7 @@ class RescaleErrorClipCache(
                 width = (base_width - 2 * floor((base_width - src_width) / 2)) if do_w else clip.width
                 height = (base_height - 2 * floor((base_height - src_height) / 2)) if do_h else clip.height
 
-                de_args = dict[str, Any]()
+                de_args = dict[str, Any](field_based=field_based)
 
                 if do_h:
                     de_args.update(src_height=src_height, src_top=(height - src_height) / 2)
@@ -836,7 +842,8 @@ class RescaleErrorAnalyzer(ExtendedWidget):
                 attempts = [(round(w, 0), round(h, 0)) for w, h in attempts]
 
             self.workers[frame] = RescaleErrorRunner(
-                self, wclip, int(frame), decimals == 0, attempts, rescale_mode, metric_mode, self.kernel
+                self, wclip, int(frame), decimals == 0, attempts,
+                rescale_mode, metric_mode, self.kernel, FieldBased.PROGRESSIVE
             )
 
             self.workers[frame].error_step.connect(self.error_step_hook(frame, self.main.current_output.index))
