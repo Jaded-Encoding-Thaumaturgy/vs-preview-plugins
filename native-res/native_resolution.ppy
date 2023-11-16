@@ -448,7 +448,7 @@ class RescaleErrorRunner(QObject):
         rescaled_clip = self.clip.std.BlankClip(length=len(self.attempts)).std.FrameEval(lambda n: rescaled_clips[n][self.frame])
 
         if self.metric_mode == 0:
-            metric_expr = 'x y - abs dup 0.015 > swap 0 ?'
+            metric_expr = 'x y - abs'
         elif self.metric_mode == 1:
             metric_expr = 'x y - 2 pow'
         elif self.metric_mode == 2:
