@@ -1,0 +1,39 @@
+from __future__ import annotations
+
+from PyQt6.QtCore import QUrl
+from PyQt6.QtWidgets import QLabel, QWidget
+from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings
+from PyQt6.QtWebEngineWidgets import QWebEngineView
+from vspreview.core import Frame, HBoxLayout, SpinBox, Stretch, Switch, VBoxLayout
+from vspreview.plugins import AbstractPlugin, PluginConfig
+
+__all__ = ["SubwaySurfers"]
+
+class SubwaySurfers(AbstractPlugin, QWidget):
+    _config = PluginConfig('pw.vodes.subsurf', 'Subway-Surfers')
+
+    def setup_ui(self) -> None:
+        self.page = QWebEnginePage()
+        self.page.setUrl(QUrl("https://ad-freegames.github.io/subway-surfers/"))
+        self.page.setAudioMuted(True)
+
+        self.webview = QWebEngineView()
+        settings = self.webview.settings()
+
+        # Bros I don't know what to do. Audio still not working
+        settings.setUnknownUrlSchemePolicy(QWebEngineSettings.UnknownUrlSchemePolicy.AllowAllUnknownUrlSchemes)
+        settings.setAttribute(QWebEngineSettings.WebAttribute.Accelerated2dCanvasEnabled, True)
+        settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, True)
+        settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessFileUrls, True)
+        settings.setAttribute(QWebEngineSettings.WebAttribute.LocalStorageEnabled, True)
+        settings.setAttribute(QWebEngineSettings.WebAttribute.WebGLEnabled, True)
+
+        self.webview.setPage(self.page)
+
+        self.muteswitch = Switch(clicked=self.muteSwitchClicked)
+        buttonRow = HBoxLayout([QLabel("Sound: "), self.muteswitch])
+        VBoxLayout(self, VBoxLayout([buttonRow, self.webview]))
+
+    def muteSwitchClicked(self) -> None:
+        self.page.setAudioMuted(not self.muteswitch.isChecked())
+        
