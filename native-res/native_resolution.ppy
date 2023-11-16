@@ -469,7 +469,7 @@ class RescaleErrorRunner(QObject):
 
         attempt_idx = 0 if 'h' not in self.mode else 1
 
-        self.data = cast(tuple[list[float], list[float]], ([x[attempt_idx] for x in self.attempts], errors))
+        self.data = ([x[attempt_idx] for x in self.attempts], errors)
 
         self.finished.emit()
         self.deleteLater()
