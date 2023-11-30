@@ -569,7 +569,7 @@ class RescaleErrorClipCache(DynamicDataCache[
                 width = (base_width - 2 * floor((base_width - src_width) / 2)) if do_w else clip.width
                 height = (base_height - 2 * floor((base_height - src_height) / 2)) if do_h else clip.height
 
-                de_args = dict[str, Any](field_based=field_based)
+                de_args = dict[str, Any]()
 
                 if do_h:
                     de_args.update(src_height=src_height, src_top=(height - src_height) / 2)
@@ -577,7 +577,9 @@ class RescaleErrorClipCache(DynamicDataCache[
                 if do_w:
                     de_args.update(src_width=src_width, src_left=(width - src_width) / 2)
 
-                return kernel.scale(kernel.descale(clip, width, height, **de_args), clip.width, clip.height, **de_args)
+                return kernel.scale(
+                    kernel.descale(clip, width, height, field_based=field_based, **de_args), clip.width, clip.height, **de_args
+                )
 
         return list(map(_gen_clip_from_attempt, attempts))
 
