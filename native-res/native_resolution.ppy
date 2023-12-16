@@ -355,7 +355,7 @@ class FrequencyAnalyzer(ExtendedWidget):
                 if cut_rate:
                     side_cut = mod2(clip.width / (2 + cut_rate))
 
-                self.padded_clip_cache[clip] = padder(
+                self.padded_clip_cache[clip] = padder.MIRROR(
                     clip.std.Crop(side_cut, side_cut, top_cut, top_cut),
                     side_cut // 2, side_cut // 2, top_cut, top_cut
                 ).std.Transpose()
