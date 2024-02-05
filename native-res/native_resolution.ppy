@@ -605,7 +605,7 @@ class RescaleErrorAnalyzer(ExtendedWidget):
         self.controls = QWidget()
 
         self.sizes_to_check_combobox = ComboBox[str](
-            model=GeneralModel[str](['Width & Height', 'Height', 'Width'], False),
+            model=GeneralModel[str](['Height', 'Width'], False),
             currentIndex=0, sizeAdjustPolicy=ComboBox.SizeAdjustPolicy.AdjustToContents
         )
         self.kernels_combobox = ComboBox[str](
@@ -903,7 +903,7 @@ class RescaleErrorAnalyzer(ExtendedWidget):
 
     @property
     def rescale_mode(self) -> str:
-        return ('wh', 'h', 'w')[self.sizes_to_check_combobox.currentIndex()]
+        return ('h', 'w')[self.sizes_to_check_combobox.currentIndex()]
 
     @property
     def step_decimals(self) -> int:
