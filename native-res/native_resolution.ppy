@@ -22,7 +22,7 @@ from vspreview.models import GeneralModel
 from vspreview.plugins import AbstractPlugin, PluginConfig
 from vstools import (
     ClipFramesCache, ClipsCache, Colorspace, DynamicClipsCache, Matrix, R, T, clip_data_gather, complex_hash, core,
-    depth, get_y, mod2, padder, plane, vs, vs_object, FieldBased
+    depth, get_y, mod2, padder, plane, vs, vs_object, FieldBased, get_w, get_h
 )
 
 __all__ = [
@@ -747,6 +747,10 @@ class RescaleErrorAnalyzer(ExtendedWidget):
         do_width = 'Height' not in self.sizes_to_check_combobox.currentData()
 
         if do_width:
+            if self.height_min_spinbox.isVisible():
+                self.width_min_spinbox.setValue(get_w(self.height_min_spinbox.value(), self.curr_clip))
+                self.width_max_spinbox.setValue(get_w(self.height_max_spinbox.value(), self.curr_clip))
+
             self.width_min_spinbox.show()
             self.width_max_spinbox.show()
 
@@ -755,6 +759,10 @@ class RescaleErrorAnalyzer(ExtendedWidget):
 
             self.min_max_label.setText('Min/Max width checked')
         else:
+            if self.width_min_spinbox.isVisible():
+                self.height_min_spinbox.setValue(get_h(self.width_min_spinbox.value(), self.curr_clip))
+                self.height_max_spinbox.setValue(get_h(self.width_max_spinbox.value(), self.curr_clip))
+
             self.width_min_spinbox.hide()
             self.width_max_spinbox.hide()
 
