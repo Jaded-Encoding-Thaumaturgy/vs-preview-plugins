@@ -69,7 +69,7 @@ class FrequencyCanvas(PlottingCanvasDefaultFrame):
         self.plugin = plugin
 
     def on_mouse_moved(self, event: PlotMouseEvent) -> None:
-        width_check = self.plugin.size_switch.isChecked()
+        width_check = self.plugin.dimension_switch.isChecked()
 
         self.plugin.position.setText(
             f'{"Width" if width_check else "Height"}: {int(event.xdata)}, Error: {self.axes.lines[0].get_ydata()[int(event.xdata)]:.3f}'
@@ -81,19 +81,19 @@ class FrequencyCanvas(PlottingCanvasDefaultFrame):
         inter_norm = self.plugin.get_inter(dct, dct_up, *self.plugin.check_range)
         inter_cross = self.plugin.get_inter(dct_cross, None, *self.plugin.check_range)
 
-        current_size = 'Width' if self.plugin.size_switch.isChecked() else 'Height'
-        opposite_size = 'Height' if self.plugin.size_switch.isChecked() else 'Width'
+        current_dimension = 'Width' if self.plugin.dimension_switch.isChecked() else 'Height'
+        opposite_dimension = 'Height' if self.plugin.dimension_switch.isChecked() else 'Width'
 
         results_text = 'Spikes: '
         if len(inter_norm):
             results_text += ', '.join(map(str, sorted(set(inter_norm))))
         else:
-            results_text += f'None found. ({len(inter_cross)} found on {opposite_size})'
+            results_text += f'None found. ({len(inter_cross)} found on {opposite_dimension})'
 
         self.plugin.results.setText(results_text)
 
-        self.axes.plot(dct, label=current_size)
-        self.axes.plot(dct_cross, label=opposite_size)
+        self.axes.plot(dct, label=current_dimension)
+        self.axes.plot(dct_cross, label=opposite_dimension)
 
         for inter, dct_base, color in [(inter_norm, dct, 'r'), (inter_cross, dct_cross, 'b')]:
             if len(inter):
@@ -135,8 +135,8 @@ class FrequencyAnalyzer(ExtendedWidget):
 
         self.canvas = FrequencyCanvas(self)
 
-        self.size_switch = Switch(
-            12, 40, 1, ('Height', 'Width', 2), checked=False, clicked=self.on_size_to_check_change
+        self.dimension_switch = Switch(
+            12, 40, 1, ('Height', 'Width', 2), checked=False, clicked=self.on_dimension_to_check_change
         )
 
         on_update_cb = self.on_update_values(False, False, True, True, True, True)
@@ -162,7 +162,7 @@ class FrequencyAnalyzer(ExtendedWidget):
         left_controls_frame = QFrame()
         HBoxLayout(left_controls_frame, [
             VBoxLayout([
-                self.size_switch
+                self.dimension_switch
             ]),
             VBoxLayout([
                 self.min_max_label,
@@ -180,7 +180,7 @@ class FrequencyAnalyzer(ExtendedWidget):
             VBoxLayout([QLabel('Check radius'), self.check_radius_spinbox])
         ])
 
-        self.on_size_to_check_change(False)
+        self.on_dimension_to_check_change(False)
 
         VBoxLayout(self, [
             HBoxLayout([
@@ -224,7 +224,7 @@ class FrequencyAnalyzer(ExtendedWidget):
 
     @property
     def check_range(self) -> tuple[int, int]:
-        if self.size_switch.isChecked():
+        if self.dimension_switch.isChecked():
             return self.width_min_spinbox.value(), self.width_max_spinbox.value()
 
         return self.height_min_spinbox.value(), self.height_max_spinbox.value()
@@ -290,7 +290,7 @@ class FrequencyAnalyzer(ExtendedWidget):
         self.clean_cache(True, True, True, True, True, True)
         self.canvas.render()
 
-    def on_size_to_check_change(self, check_width: bool) -> None:
+    def on_dimension_to_check_change(self, check_width: bool) -> None:
         if check_width:
             self.width_min_spinbox.show()
             self.width_max_spinbox.show()
@@ -369,7 +369,7 @@ class FrequencyAnalyzer(ExtendedWidget):
 
         dct_v, dct_h = _get_arr(cut_clip), _get_arr(self.transp_clip_cache[cut_clip])
 
-        if (check_width := self.size_switch.isChecked()):
+        if (check_width := self.dimension_switch.isChecked()):
             dct_vv, dct_hh, rate = (dct_v, dct_h, len(dct_v) / len(dct_h))
         else:
             dct_vv, dct_hh, rate = (dct_h, dct_v, len(dct_h) / len(dct_v))
@@ -606,8 +606,8 @@ class RescaleErrorAnalyzer(ExtendedWidget):
         # Controls
         self.controls = QWidget()
 
-        self.size_switch = Switch(
-            12, 40, 1, ('Height', 'Width', 2), checked=False, clicked=self.on_size_to_check_change
+        self.dimension_switch = Switch(
+            12, 40, 1, ('Height', 'Width', 2), checked=False, clicked=self.on_dimension_to_check_change
         )
         self.kernels_combobox = ComboBox[str](
             model=GeneralModel[str](list(map(get_kernel_name, common_kernels)), False),
@@ -642,7 +642,7 @@ class RescaleErrorAnalyzer(ExtendedWidget):
         HBoxLayout(self.controls, [
             VBoxLayout([
                 QLabel('Dimension to check'),
-                self.size_switch,
+                self.dimension_switch,
             ]),
             VBoxLayout([
                 self.bs_parity_label,
@@ -671,12 +671,12 @@ class RescaleErrorAnalyzer(ExtendedWidget):
             self.update_button
         ])
 
-        self.on_size_to_check_change()
+        self.on_dimension_to_check_change()
 
         self.controls.setFixedHeight(80)
 
         self.bs_parity_switch.clicked.connect(self.render_callback)
-        self.size_switch.clicked.connect(self.render_callback)
+        self.dimension_switch.clicked.connect(self.render_callback)
         self.kernels_combobox.currentIndexChanged.connect(self.render_callback)
         self.metric_type_combobox.currentIndexChanged.connect(self.render_callback)
 
@@ -752,7 +752,7 @@ class RescaleErrorAnalyzer(ExtendedWidget):
         self.errors_loading.setVisible(errors)
         self.display.setVisible(display)
 
-    def on_size_to_check_change(self) -> None:
+    def on_dimension_to_check_change(self) -> None:
         if self.rescale_mode == 'w':
             if self.height_min_spinbox.isVisible():
                 self.width_min_spinbox.setValue(get_w(self.height_min_spinbox.value(), self.curr_clip))
@@ -920,7 +920,7 @@ class RescaleErrorAnalyzer(ExtendedWidget):
 
     @property
     def rescale_mode(self) -> str:
-        return 'w' if self.size_switch.isChecked() else 'h'
+        return 'w' if self.dimension_switch.isChecked() else 'h'
 
     @property
     def step_decimals(self) -> int:
