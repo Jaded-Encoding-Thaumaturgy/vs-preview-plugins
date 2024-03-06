@@ -430,7 +430,7 @@ class RescaleErrorRunner(QObject):
     def __init__(
         self, analyzer: RescaleErrorAnalyzer, clip: vs.VideoNode, frame: int,
         is_integer: bool, attempts: Sequence[tuple[float, float]], mode: str,
-        metric_mode: int, kernel: Kernel, field_based: FieldBased
+        bs_parity: int, metric_mode: int, kernel: Kernel, field_based: FieldBased
     ) -> None:
         super().__init__()
 
@@ -440,13 +440,14 @@ class RescaleErrorRunner(QObject):
         self.is_integer = is_integer
         self.attempts = attempts
         self.mode = mode
+        self.bs_parity = bs_parity
         self.metric_mode = metric_mode
         self.kernel = kernel
         self.field_based = field_based
 
     def run(self) -> None:
         rescaled_clips = self.analyzer.clips_cache[
-            (self.clip, self.attempts, self.kernel, self.is_integer, self.mode, self.field_based)
+            (self.clip, self.attempts, self.kernel, self.is_integer, self.mode, self.bs_parity, self.field_based)
         ]
 
         rescaled_clip = self.clip.std.BlankClip(length=len(self.attempts)).std.FrameEval(lambda n: rescaled_clips[n][self.frame])
@@ -551,7 +552,7 @@ class RescaleErrorClipCache(DynamicDataCache[
     def get_data(
         self, args: tuple[vs.VideoNode, Sequence[tuple[float, float]], Kernel, bool, str, FieldBased]
     ) -> list[vs.VideoNode]:
-        clip, attempts, kernel, is_integer, mode, field_based = args
+        clip, attempts, kernel, is_integer, mode, bs_parity, field_based = args
 
         if is_integer:
             def _gen_clip_from_attempt(attempt: tuple[Any, Any]) -> vs.VideoNode:
@@ -563,8 +564,9 @@ class RescaleErrorClipCache(DynamicDataCache[
             def _gen_clip_from_attempt(attempt: tuple[Any, Any]) -> vs.VideoNode:
                 src_width, src_height = attempt
 
-                base_height = mod2(ceil(src_height))
-                base_width = mod2(base_height * clip_ar)
+
+                base_height = mod2(ceil(src_height)) + bs_parity
+                base_width = mod2(base_height * clip_ar) + bs_parity
 
                 width = (base_width - 2 * floor((base_width - src_width) / 2)) if do_w else clip.width
                 height = (base_height - 2 * floor((base_height - src_height) / 2)) if do_h else clip.height
@@ -615,6 +617,11 @@ class RescaleErrorAnalyzer(ExtendedWidget):
 
         self.sizes_to_check_combobox.currentIndexChanged.connect(self.on_size_to_check_change)
 
+        self.bs_parity_label = QLabel()
+        self.bs_parity_switch = Switch(
+            12, 40, 1, ('Even', 'Odd', 2), checked=False
+        )
+
         self.min_max_label = QLabel()
 
         self.height_min_spinbox = SpinBox(None, 0, None, 'px')
@@ -639,6 +646,10 @@ class RescaleErrorAnalyzer(ExtendedWidget):
             VBoxLayout([
                 QLabel('Sizes to check'),
                 self.sizes_to_check_combobox,
+            ]),
+            VBoxLayout([
+                self.bs_parity_label,
+                self.bs_parity_switch,
             ]),
             VBoxLayout([
                 self.min_max_label,
@@ -667,6 +678,7 @@ class RescaleErrorAnalyzer(ExtendedWidget):
 
         self.controls.setFixedHeight(80)
 
+        self.bs_parity_switch.clicked.connect(self.render_callback)
         self.sizes_to_check_combobox.currentIndexChanged.connect(self.render_callback)
         self.kernels_combobox.currentIndexChanged.connect(self.render_callback)
         self.metric_type_combobox.currentIndexChanged.connect(self.render_callback)
@@ -757,6 +769,7 @@ class RescaleErrorAnalyzer(ExtendedWidget):
             self.height_min_spinbox.hide()
             self.height_max_spinbox.hide()
 
+            self.bs_parity_label.setText('Base width parity')
             self.min_max_label.setText('Min/Max width checked')
         else:
             if self.width_min_spinbox.isVisible():
@@ -769,6 +782,7 @@ class RescaleErrorAnalyzer(ExtendedWidget):
             self.height_min_spinbox.show()
             self.height_max_spinbox.show()
 
+            self.bs_parity_label.setText('Base height parity')
             self.min_max_label.setText('Min/Max height checked')
 
     @property
@@ -836,7 +850,7 @@ class RescaleErrorAnalyzer(ExtendedWidget):
         if frame not in self.workers:
             self.set_visibility(True, False, False)
 
-            rescale_mode, metric_mode, start, stop, step, decimals = (*self._get_values(), self.step_decimals)
+            rescale_mode, bs_parity, metric_mode, start, stop, step, decimals = (*self._get_values(), self.step_decimals)
 
             wclip = self.workclips[self.main.current_output.source.clip]
 
@@ -853,7 +867,7 @@ class RescaleErrorAnalyzer(ExtendedWidget):
 
             self.workers[frame] = RescaleErrorRunner(
                 self, wclip, int(frame), decimals == 0, attempts,
-                rescale_mode, metric_mode, self.kernel, FieldBased.PROGRESSIVE
+                rescale_mode, bs_parity, metric_mode, self.kernel, FieldBased.PROGRESSIVE
             )
 
             self.workers[frame].error_step.connect(self.error_step_hook(frame, self.main.current_output.index))
@@ -933,7 +947,9 @@ class RescaleErrorAnalyzer(ExtendedWidget):
         )
         step = min(max(step, self.step_spinbox.minimum()), self.step_spinbox.maximum())
 
-        return self.rescale_mode, self.metric_type_combobox.currentIndex(), start, stop, step
+        bs_parity = 1 if self.bs_parity_switch.isChecked() else 0
+
+        return self.rescale_mode, bs_parity, self.metric_type_combobox.currentIndex(), start, stop, step
 
     @property
     def kernel(self) -> Kernel:
