@@ -22,7 +22,7 @@ from vspreview.models import GeneralModel
 from vspreview.plugins import AbstractPlugin, PluginConfig
 from vstools import (
     ClipFramesCache, ClipsCache, Colorspace, DynamicClipsCache, Matrix, R, T, clip_data_gather, complex_hash, core,
-    depth, get_y, mod2, padder, plane, vs, vs_object, FieldBased
+    depth, get_y, mod2, padder, plane, vs, vs_object, FieldBased, get_w, get_h
 )
 
 __all__ = [
@@ -69,7 +69,7 @@ class FrequencyCanvas(PlottingCanvasDefaultFrame):
         self.plugin = plugin
 
     def on_mouse_moved(self, event: PlotMouseEvent) -> None:
-        width_check = self.plugin.size_switch.isChecked()
+        width_check = self.plugin.dimension_switch.isChecked()
 
         self.plugin.position.setText(
             f'{"Width" if width_check else "Height"}: {int(event.xdata)}, Error: {self.axes.lines[0].get_ydata()[int(event.xdata)]:.3f}'
@@ -81,19 +81,19 @@ class FrequencyCanvas(PlottingCanvasDefaultFrame):
         inter_norm = self.plugin.get_inter(dct, dct_up, *self.plugin.check_range)
         inter_cross = self.plugin.get_inter(dct_cross, None, *self.plugin.check_range)
 
-        current_size = 'Width' if self.plugin.size_switch.isChecked() else 'Height'
-        opposite_size = 'Height' if self.plugin.size_switch.isChecked() else 'Width'
+        current_dimension = 'Width' if self.plugin.dimension_switch.isChecked() else 'Height'
+        opposite_dimension = 'Height' if self.plugin.dimension_switch.isChecked() else 'Width'
 
         results_text = 'Spikes: '
         if len(inter_norm):
             results_text += ', '.join(map(str, sorted(set(inter_norm))))
         else:
-            results_text += f'None found. ({len(inter_cross)} found on {opposite_size})'
+            results_text += f'None found. ({len(inter_cross)} found on {opposite_dimension})'
 
         self.plugin.results.setText(results_text)
 
-        self.axes.plot(dct, label=current_size)
-        self.axes.plot(dct_cross, label=opposite_size)
+        self.axes.plot(dct, label=current_dimension)
+        self.axes.plot(dct_cross, label=opposite_dimension)
 
         for inter, dct_base, color in [(inter_norm, dct, 'r'), (inter_cross, dct_cross, 'b')]:
             if len(inter):
@@ -135,8 +135,8 @@ class FrequencyAnalyzer(ExtendedWidget):
 
         self.canvas = FrequencyCanvas(self)
 
-        self.size_switch = Switch(
-            12, 40, 1, ('Height', 'Width', 2), checked=False, clicked=self.on_size_to_check_change
+        self.dimension_switch = Switch(
+            12, 40, 1, ('Height', 'Width', 2), checked=False, clicked=self.on_dimension_to_check_change
         )
 
         on_update_cb = self.on_update_values(False, False, True, True, True, True)
@@ -162,7 +162,7 @@ class FrequencyAnalyzer(ExtendedWidget):
         left_controls_frame = QFrame()
         HBoxLayout(left_controls_frame, [
             VBoxLayout([
-                self.size_switch
+                self.dimension_switch
             ]),
             VBoxLayout([
                 self.min_max_label,
@@ -180,7 +180,7 @@ class FrequencyAnalyzer(ExtendedWidget):
             VBoxLayout([QLabel('Check radius'), self.check_radius_spinbox])
         ])
 
-        self.on_size_to_check_change(False)
+        self.on_dimension_to_check_change(False)
 
         VBoxLayout(self, [
             HBoxLayout([
@@ -224,7 +224,7 @@ class FrequencyAnalyzer(ExtendedWidget):
 
     @property
     def check_range(self) -> tuple[int, int]:
-        if self.size_switch.isChecked():
+        if self.dimension_switch.isChecked():
             return self.width_min_spinbox.value(), self.width_max_spinbox.value()
 
         return self.height_min_spinbox.value(), self.height_max_spinbox.value()
@@ -290,7 +290,7 @@ class FrequencyAnalyzer(ExtendedWidget):
         self.clean_cache(True, True, True, True, True, True)
         self.canvas.render()
 
-    def on_size_to_check_change(self, check_width: bool) -> None:
+    def on_dimension_to_check_change(self, check_width: bool) -> None:
         if check_width:
             self.width_min_spinbox.show()
             self.width_max_spinbox.show()
@@ -369,7 +369,7 @@ class FrequencyAnalyzer(ExtendedWidget):
 
         dct_v, dct_h = _get_arr(cut_clip), _get_arr(self.transp_clip_cache[cut_clip])
 
-        if (check_width := self.size_switch.isChecked()):
+        if (check_width := self.dimension_switch.isChecked()):
             dct_vv, dct_hh, rate = (dct_v, dct_h, len(dct_v) / len(dct_h))
         else:
             dct_vv, dct_hh, rate = (dct_h, dct_v, len(dct_h) / len(dct_v))
@@ -430,7 +430,7 @@ class RescaleErrorRunner(QObject):
     def __init__(
         self, analyzer: RescaleErrorAnalyzer, clip: vs.VideoNode, frame: int,
         is_integer: bool, attempts: Sequence[tuple[float, float]], mode: str,
-        metric_mode: int, kernel: Kernel, field_based: FieldBased
+        bs_parity: int, metric_mode: int, kernel: Kernel, field_based: FieldBased
     ) -> None:
         super().__init__()
 
@@ -440,13 +440,14 @@ class RescaleErrorRunner(QObject):
         self.is_integer = is_integer
         self.attempts = attempts
         self.mode = mode
+        self.bs_parity = bs_parity
         self.metric_mode = metric_mode
         self.kernel = kernel
         self.field_based = field_based
 
     def run(self) -> None:
         rescaled_clips = self.analyzer.clips_cache[
-            (self.clip, self.attempts, self.kernel, self.is_integer, self.mode, self.field_based)
+            (self.clip, self.attempts, self.kernel, self.is_integer, self.mode, self.bs_parity, self.field_based)
         ]
 
         rescaled_clip = self.clip.std.BlankClip(length=len(self.attempts)).std.FrameEval(lambda n: rescaled_clips[n][self.frame])
@@ -551,7 +552,7 @@ class RescaleErrorClipCache(DynamicDataCache[
     def get_data(
         self, args: tuple[vs.VideoNode, Sequence[tuple[float, float]], Kernel, bool, str, FieldBased]
     ) -> list[vs.VideoNode]:
-        clip, attempts, kernel, is_integer, mode, field_based = args
+        clip, attempts, kernel, is_integer, mode, bs_parity, field_based = args
 
         if is_integer:
             def _gen_clip_from_attempt(attempt: tuple[Any, Any]) -> vs.VideoNode:
@@ -563,8 +564,9 @@ class RescaleErrorClipCache(DynamicDataCache[
             def _gen_clip_from_attempt(attempt: tuple[Any, Any]) -> vs.VideoNode:
                 src_width, src_height = attempt
 
-                base_height = mod2(ceil(src_height))
-                base_width = mod2(base_height * clip_ar)
+
+                base_height = mod2(ceil(src_height)) + bs_parity
+                base_width = mod2(base_height * clip_ar) + bs_parity
 
                 width = (base_width - 2 * floor((base_width - src_width) / 2)) if do_w else clip.width
                 height = (base_height - 2 * floor((base_height - src_height) / 2)) if do_h else clip.height
@@ -604,16 +606,18 @@ class RescaleErrorAnalyzer(ExtendedWidget):
         # Controls
         self.controls = QWidget()
 
-        self.sizes_to_check_combobox = ComboBox[str](
-            model=GeneralModel[str](['Height', 'Width'], False),
-            currentIndex=0, sizeAdjustPolicy=ComboBox.SizeAdjustPolicy.AdjustToContents
+        self.dimension_switch = Switch(
+            12, 40, 1, ('Height', 'Width', 2), checked=False, clicked=self.on_dimension_to_check_change
         )
         self.kernels_combobox = ComboBox[str](
             model=GeneralModel[str](list(map(get_kernel_name, common_kernels)), False),
             currentIndex=0, sizeAdjustPolicy=ComboBox.SizeAdjustPolicy.AdjustToContents
         )
 
-        self.sizes_to_check_combobox.currentIndexChanged.connect(self.on_size_to_check_change)
+        self.bs_parity_label = QLabel()
+        self.bs_parity_switch = Switch(
+            12, 40, 1, ('Even', 'Odd', 2), checked=False
+        )
 
         self.min_max_label = QLabel()
 
@@ -637,8 +641,12 @@ class RescaleErrorAnalyzer(ExtendedWidget):
 
         HBoxLayout(self.controls, [
             VBoxLayout([
-                QLabel('Sizes to check'),
-                self.sizes_to_check_combobox,
+                QLabel('Dimension to check'),
+                self.dimension_switch,
+            ]),
+            VBoxLayout([
+                self.bs_parity_label,
+                self.bs_parity_switch,
             ]),
             VBoxLayout([
                 self.min_max_label,
@@ -663,11 +671,12 @@ class RescaleErrorAnalyzer(ExtendedWidget):
             self.update_button
         ])
 
-        self.on_size_to_check_change()
+        self.on_dimension_to_check_change()
 
         self.controls.setFixedHeight(80)
 
-        self.sizes_to_check_combobox.currentIndexChanged.connect(self.render_callback)
+        self.bs_parity_switch.clicked.connect(self.render_callback)
+        self.dimension_switch.clicked.connect(self.render_callback)
         self.kernels_combobox.currentIndexChanged.connect(self.render_callback)
         self.metric_type_combobox.currentIndexChanged.connect(self.render_callback)
 
@@ -743,24 +752,32 @@ class RescaleErrorAnalyzer(ExtendedWidget):
         self.errors_loading.setVisible(errors)
         self.display.setVisible(display)
 
-    def on_size_to_check_change(self) -> None:
-        do_width = 'Height' not in self.sizes_to_check_combobox.currentData()
+    def on_dimension_to_check_change(self) -> None:
+        if self.rescale_mode == 'w':
+            if self.height_min_spinbox.isVisible():
+                self.width_min_spinbox.setValue(get_w(self.height_min_spinbox.value(), self.curr_clip))
+                self.width_max_spinbox.setValue(get_w(self.height_max_spinbox.value(), self.curr_clip))
 
-        if do_width:
             self.width_min_spinbox.show()
             self.width_max_spinbox.show()
 
             self.height_min_spinbox.hide()
             self.height_max_spinbox.hide()
 
+            self.bs_parity_label.setText('Base width parity')
             self.min_max_label.setText('Min/Max width checked')
         else:
+            if self.width_min_spinbox.isVisible():
+                self.height_min_spinbox.setValue(get_h(self.width_min_spinbox.value(), self.curr_clip))
+                self.height_max_spinbox.setValue(get_h(self.width_max_spinbox.value(), self.curr_clip))
+
             self.width_min_spinbox.hide()
             self.width_max_spinbox.hide()
 
             self.height_min_spinbox.show()
             self.height_max_spinbox.show()
 
+            self.bs_parity_label.setText('Base height parity')
             self.min_max_label.setText('Min/Max height checked')
 
     @property
@@ -828,7 +845,7 @@ class RescaleErrorAnalyzer(ExtendedWidget):
         if frame not in self.workers:
             self.set_visibility(True, False, False)
 
-            rescale_mode, metric_mode, start, stop, step, decimals = (*self._get_values(), self.step_decimals)
+            rescale_mode, bs_parity, metric_mode, start, stop, step, decimals = (*self._get_values(), self.step_decimals)
 
             wclip = self.workclips[self.main.current_output.source.clip]
 
@@ -845,7 +862,7 @@ class RescaleErrorAnalyzer(ExtendedWidget):
 
             self.workers[frame] = RescaleErrorRunner(
                 self, wclip, int(frame), decimals == 0, attempts,
-                rescale_mode, metric_mode, self.kernel, FieldBased.PROGRESSIVE
+                rescale_mode, bs_parity, metric_mode, self.kernel, FieldBased.PROGRESSIVE
             )
 
             self.workers[frame].error_step.connect(self.error_step_hook(frame, self.main.current_output.index))
@@ -903,7 +920,7 @@ class RescaleErrorAnalyzer(ExtendedWidget):
 
     @property
     def rescale_mode(self) -> str:
-        return ('h', 'w')[self.sizes_to_check_combobox.currentIndex()]
+        return 'w' if self.dimension_switch.isChecked() else 'h'
 
     @property
     def step_decimals(self) -> int:
@@ -925,7 +942,9 @@ class RescaleErrorAnalyzer(ExtendedWidget):
         )
         step = min(max(step, self.step_spinbox.minimum()), self.step_spinbox.maximum())
 
-        return self.rescale_mode, self.metric_type_combobox.currentIndex(), start, stop, step
+        bs_parity = 1 if self.bs_parity_switch.isChecked() else 0
+
+        return self.rescale_mode, bs_parity, self.metric_type_combobox.currentIndex(), start, stop, step
 
     @property
     def kernel(self) -> Kernel:
