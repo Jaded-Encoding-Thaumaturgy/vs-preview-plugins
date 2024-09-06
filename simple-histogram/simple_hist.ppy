@@ -1,0 +1,156 @@
+from __future__ import annotations
+
+from PyQt6.QtWidgets import QTabWidget
+from stgpytools import CustomStrEnum, CustomValueError
+from vspreview.core import Frame
+from vspreview.main import MainWindow
+from vspreview.plugins import AbstractPlugin, MappedNodesViewPlugin, PluginConfig
+from vstools import VSFunctionNoArgs, core, depth, vs
+
+__all__ = [
+    'SimpleHistogramWidget'
+]
+
+
+class HistogramMode(CustomStrEnum):
+    """Histogram modes."""
+
+    CLASSIC = 'classic'
+    """Classic histogram."""
+
+    LEVELS = 'levels'
+    """Levels histogram."""
+
+    COLOR = 'color'
+    """Color histogram."""
+
+    COLOR2 = 'color2'
+    """Color2 histogram."""
+
+    def apply(self, clip: vs.VideoNode) -> vs.VideoNode:
+        """Apply the histogram mode to the clip."""
+
+        hist = self.apply(clip).std.Crop(clip.width)
+        return self._autocrop(hist)
+
+    def _autocrop(self, node: vs.VideoNode) -> vs.VideoNode:
+        # TODO: Figure out how to automatically crop away the black bar at the bottom.
+
+        return node
+
+    @property
+    def func(self) -> VSFunctionNoArgs:
+        """Get the histogram function."""
+
+        match self:
+            case HistogramMode.CLASSIC:
+                return core.hist.Classic
+            case HistogramMode.LEVELS:
+                return core.hist.Levels
+            case HistogramMode.COLOR:
+                return core.hist.Color
+            case HistogramMode.COLOR2:
+                return core.hist.Color2
+
+        raise CustomValueError("Unknown histogram mode", self)
+
+
+class ClassicHistogramPlugin(MappedNodesViewPlugin):
+    def get_node(self, node: vs.VideoNode) -> vs.VideoNode:
+        clip = depth(node, 8)
+
+        return HistogramMode.CLASSIC.apply(clip)
+
+    def init_outputs(self) -> None:
+        assert self.main.outputs
+
+
+class LevelsHistogramPlugin(MappedNodesViewPlugin):
+    def get_node(self, node: vs.VideoNode) -> vs.VideoNode:
+        clip = depth(node, 8)
+
+        return HistogramMode.LEVELS.apply(clip)
+
+    def init_outputs(self) -> None:
+        assert self.main.outputs
+
+
+class ColorHistogramPlugin(MappedNodesViewPlugin):
+    def get_node(self, node: vs.VideoNode) -> vs.VideoNode:
+        clip = depth(node, 8)
+
+        return HistogramMode.COLOR.apply(clip)
+
+    def init_outputs(self) -> None:
+        assert self.main.outputs
+
+    def _autocrop(self, node: vs.VideoNode) -> vs.VideoNode:
+        # TODO: Figure out how to automatically crop away the black bar at the bottom.
+
+        return node
+
+
+class Color2HistogramPlugin(MappedNodesViewPlugin):
+    def get_node(self, node: vs.VideoNode) -> vs.VideoNode:
+        clip = depth(node, 8)
+
+        return HistogramMode.COLOR2.apply(clip)
+
+    def init_outputs(self) -> None:
+        assert self.main.outputs
+
+    def _autocrop(self, node: vs.VideoNode) -> vs.VideoNode:
+        # TODO: Figure out how to automatically crop away the black bar at the bottom.
+
+        return node
+
+
+class SimpleHistogramWidget(AbstractPlugin, QTabWidget):
+    _config = PluginConfig('dev.lightarrowsexe.simple_histogram', 'Histogram')
+
+    def __init__(self, main: MainWindow) -> None:
+        super().__init__(main)
+
+        self.classic = ClassicHistogramPlugin(main)
+        self.levels = LevelsHistogramPlugin(main)
+        self.color = ColorHistogramPlugin(main)
+        self.color2 = Color2HistogramPlugin(main)
+
+        self.addTab(self.classic, 'Classic')
+        self.addTab(self.levels, 'Levels')
+        self.addTab(self.color, 'Color')
+        self.addTab(self.color2, 'Color2')
+
+        self.modes = (self.classic, self.levels, self.color, self.color2)
+        self.cache = [(-1, -1)] * len(self.modes)
+
+        self.currentChanged.connect(self.on_tab_change)
+
+    def setup_ui(self) -> None:
+        for mode in self.modes:
+            mode.setup_ui()
+
+    def init_outputs(self) -> None:
+        assert self.main.outputs
+
+        for mode in self.modes:
+            mode.init_outputs()  # type: ignore
+
+    def on_tab_change(self) -> None:
+        idx, key = self.currentIndex(), (
+            int(self.main.current_output.last_showed_frame), self.main.current_output.index
+        )
+        if self.cache[idx] != key:
+            if self.cache[idx][1] != key[1]:
+                self.modes[idx].on_current_output_changed(key[1], self.cache[idx][1])
+            self.modes[idx].on_current_frame_changed(self.main.current_output.last_showed_frame)
+
+    def on_current_frame_changed(self, frame: Frame) -> None:
+        idx = self.currentIndex()
+        self.modes[idx].on_current_frame_changed(frame)
+        self.cache[idx] = (int(frame), self.main.current_output.index)
+
+    def on_current_output_changed(self, index: int, prev_index: int) -> None:
+        idx = self.currentIndex()
+        self.modes[idx].on_current_output_changed(index, prev_index)
+        self.cache[idx] = (int(self.main.current_output.last_showed_frame), index)
