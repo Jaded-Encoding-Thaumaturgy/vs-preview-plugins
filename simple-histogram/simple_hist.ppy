@@ -116,7 +116,7 @@ class SimpleHistogramWidget(AbstractPlugin, QTabWidget):
         assert self.main.outputs
 
         for mode in self.modes:
-            mode.init_outputs()  # type: ignore
+            mode.init_outputs()
 
     def on_tab_change(self) -> None:
         idx, key = self.currentIndex(), (
