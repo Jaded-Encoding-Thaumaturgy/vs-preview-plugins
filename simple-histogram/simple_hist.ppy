@@ -55,54 +55,32 @@ class HistogramMode(CustomStrEnum):
         raise CustomValueError("Unknown histogram mode", self)
 
 
-class ClassicHistogramPlugin(MappedNodesViewPlugin):
+class HistogramViewPlugin(MappedNodesViewPlugin):
     def get_node(self, node: vs.VideoNode) -> vs.VideoNode:
-        clip = depth(node, 8)
-
-        return HistogramMode.CLASSIC.apply(clip)
+        return depth(node, 8)
 
     def init_outputs(self) -> None:
         assert self.main.outputs
 
 
-class LevelsHistogramPlugin(MappedNodesViewPlugin):
+class ClassicHistogramPlugin(HistogramViewPlugin):
     def get_node(self, node: vs.VideoNode) -> vs.VideoNode:
-        clip = depth(node, 8)
-
-        return HistogramMode.LEVELS.apply(clip)
-
-    def init_outputs(self) -> None:
-        assert self.main.outputs
+        return HistogramMode.CLASSIC.apply(super().get_node(node))
 
 
-class ColorHistogramPlugin(MappedNodesViewPlugin):
+class LevelsHistogramPlugin(HistogramViewPlugin):
     def get_node(self, node: vs.VideoNode) -> vs.VideoNode:
-        clip = depth(node, 8)
-
-        return HistogramMode.COLOR.apply(clip)
-
-    def init_outputs(self) -> None:
-        assert self.main.outputs
-
-    def _autocrop(self, node: vs.VideoNode) -> vs.VideoNode:
-        # TODO: Figure out how to automatically crop away the black bar at the bottom.
-
-        return node
+        return HistogramMode.LEVELS.apply(super().get_node(node))
 
 
-class Color2HistogramPlugin(MappedNodesViewPlugin):
+class ColorHistogramPlugin(HistogramViewPlugin):
     def get_node(self, node: vs.VideoNode) -> vs.VideoNode:
-        clip = depth(node, 8)
+        return HistogramMode.COLOR.apply(super().get_node(node))
 
-        return HistogramMode.COLOR2.apply(clip)
 
-    def init_outputs(self) -> None:
-        assert self.main.outputs
-
-    def _autocrop(self, node: vs.VideoNode) -> vs.VideoNode:
-        # TODO: Figure out how to automatically crop away the black bar at the bottom.
-
-        return node
+class Color2HistogramPlugin(HistogramViewPlugin):
+    def get_node(self, node: vs.VideoNode) -> vs.VideoNode:
+        return HistogramMode.COLOR2.apply(super().get_node(node))
 
 
 class SimpleHistogramWidget(AbstractPlugin, QTabWidget):
