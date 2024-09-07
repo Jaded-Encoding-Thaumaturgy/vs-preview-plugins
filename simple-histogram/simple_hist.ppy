@@ -116,17 +116,17 @@ class SimpleHistogramWidget(AbstractPlugin, QTabWidget):
         self.color = ColorHistogramPlugin(main)
         self.color2 = Color2HistogramPlugin(main)
 
-        self.addTab(self.classic, 'Classic')
-        self.addTab(self.levels, 'Levels')
-        self.addTab(self.color, 'Color')
-        self.addTab(self.color2, 'Color2')
-
         self.modes = (self.classic, self.levels, self.color, self.color2)
         self.cache = [(-1, -1)] * len(self.modes)
 
         self.currentChanged.connect(self.on_tab_change)
 
     def setup_ui(self) -> None:
+        self.addTab(self.classic, 'Classic')
+        self.addTab(self.levels, 'Levels')
+        self.addTab(self.color, 'Color')
+        self.addTab(self.color2, 'Color2')
+
         for mode in self.modes:
             mode.setup_ui()
 
