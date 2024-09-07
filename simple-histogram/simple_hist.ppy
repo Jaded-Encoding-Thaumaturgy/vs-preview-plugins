@@ -29,28 +29,32 @@ class HistogramMode(CustomStrEnum):
 
     def apply(self, clip: vs.VideoNode) -> vs.VideoNode:
         """Apply the histogram mode to the clip."""
-
-        hist = self.apply(clip).std.Crop(clip.width)
-        return self._autocrop(hist)
-
-    def _autocrop(self, node: vs.VideoNode) -> vs.VideoNode:
-        # TODO: Figure out how to automatically crop away the black bar at the bottom.
-
-        return node
+        return self.func(clip)
 
     @property
     def func(self) -> VSFunctionNoArgs:
         """Get the histogram function."""
+        def upscale(clip: vs.VideoNode, ratio: int = 2) -> vs.VideoNode:
+            return clip.resize.Point(clip.width * ratio, clip.height * ratio)
 
         match self:
             case HistogramMode.CLASSIC:
-                return core.hist.Classic
+                return lambda clip: core.hist.Classic(clip).std.Crop(clip.width).std.FlipHorizontal().std.Transpose()
             case HistogramMode.LEVELS:
-                return core.hist.Levels
+                return lambda clip: upscale(
+                    core.hist.Levels(clip).std.CropAbs(256, 226, clip.width),
+                    3
+                )
             case HistogramMode.COLOR:
-                return core.hist.Color
+                return lambda clip: upscale(
+                    core.hist.Color(clip).std.CropAbs(256, 256, clip.width),
+                    3
+                )
             case HistogramMode.COLOR2:
-                return core.hist.Color2
+                return lambda clip: upscale(
+                    core.hist.Color2(clip).std.CropAbs(256, 256, clip.width),
+                    3
+                )
 
         raise CustomValueError("Unknown histogram mode", self)
 
