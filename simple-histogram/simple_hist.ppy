@@ -29,80 +29,62 @@ class HistogramMode(CustomStrEnum):
 
     def apply(self, clip: vs.VideoNode) -> vs.VideoNode:
         """Apply the histogram mode to the clip."""
-
-        hist = self.apply(clip).std.Crop(clip.width)
-        return self._autocrop(hist)
-
-    def _autocrop(self, node: vs.VideoNode) -> vs.VideoNode:
-        # TODO: Figure out how to automatically crop away the black bar at the bottom.
-
-        return node
+        return self.func(clip)
 
     @property
     def func(self) -> VSFunctionNoArgs:
         """Get the histogram function."""
+        def upscale(clip: vs.VideoNode, ratio: int = 2) -> vs.VideoNode:
+            return clip.resize.Point(clip.width * ratio, clip.height * ratio)
 
         match self:
             case HistogramMode.CLASSIC:
-                return core.hist.Classic
+                return lambda clip: core.hist.Classic(clip).std.Crop(clip.width).std.FlipHorizontal().std.Transpose()
             case HistogramMode.LEVELS:
-                return core.hist.Levels
+                return lambda clip: upscale(
+                    core.hist.Levels(clip).std.CropAbs(256, 226, clip.width),
+                    3
+                )
             case HistogramMode.COLOR:
-                return core.hist.Color
+                return lambda clip: upscale(
+                    core.hist.Color(clip).std.CropAbs(256, 256, clip.width),
+                    3
+                )
             case HistogramMode.COLOR2:
-                return core.hist.Color2
+                return lambda clip: upscale(
+                    core.hist.Color2(clip).std.CropAbs(256, 256, clip.width),
+                    3
+                )
 
         raise CustomValueError("Unknown histogram mode", self)
 
 
-class ClassicHistogramPlugin(MappedNodesViewPlugin):
+class HistogramViewPlugin(MappedNodesViewPlugin):
     def get_node(self, node: vs.VideoNode) -> vs.VideoNode:
-        clip = depth(node, 8)
-
-        return HistogramMode.CLASSIC.apply(clip)
+        return depth(node, 8)
 
     def init_outputs(self) -> None:
         assert self.main.outputs
 
 
-class LevelsHistogramPlugin(MappedNodesViewPlugin):
+class ClassicHistogramPlugin(HistogramViewPlugin):
     def get_node(self, node: vs.VideoNode) -> vs.VideoNode:
-        clip = depth(node, 8)
-
-        return HistogramMode.LEVELS.apply(clip)
-
-    def init_outputs(self) -> None:
-        assert self.main.outputs
+        return HistogramMode.CLASSIC.apply(super().get_node(node))
 
 
-class ColorHistogramPlugin(MappedNodesViewPlugin):
+class LevelsHistogramPlugin(HistogramViewPlugin):
     def get_node(self, node: vs.VideoNode) -> vs.VideoNode:
-        clip = depth(node, 8)
-
-        return HistogramMode.COLOR.apply(clip)
-
-    def init_outputs(self) -> None:
-        assert self.main.outputs
-
-    def _autocrop(self, node: vs.VideoNode) -> vs.VideoNode:
-        # TODO: Figure out how to automatically crop away the black bar at the bottom.
-
-        return node
+        return HistogramMode.LEVELS.apply(super().get_node(node))
 
 
-class Color2HistogramPlugin(MappedNodesViewPlugin):
+class ColorHistogramPlugin(HistogramViewPlugin):
     def get_node(self, node: vs.VideoNode) -> vs.VideoNode:
-        clip = depth(node, 8)
+        return HistogramMode.COLOR.apply(super().get_node(node))
 
-        return HistogramMode.COLOR2.apply(clip)
 
-    def init_outputs(self) -> None:
-        assert self.main.outputs
-
-    def _autocrop(self, node: vs.VideoNode) -> vs.VideoNode:
-        # TODO: Figure out how to automatically crop away the black bar at the bottom.
-
-        return node
+class Color2HistogramPlugin(HistogramViewPlugin):
+    def get_node(self, node: vs.VideoNode) -> vs.VideoNode:
+        return HistogramMode.COLOR2.apply(super().get_node(node))
 
 
 class SimpleHistogramWidget(AbstractPlugin, QTabWidget):
@@ -116,17 +98,17 @@ class SimpleHistogramWidget(AbstractPlugin, QTabWidget):
         self.color = ColorHistogramPlugin(main)
         self.color2 = Color2HistogramPlugin(main)
 
-        self.addTab(self.classic, 'Classic')
-        self.addTab(self.levels, 'Levels')
-        self.addTab(self.color, 'Color')
-        self.addTab(self.color2, 'Color2')
-
         self.modes = (self.classic, self.levels, self.color, self.color2)
         self.cache = [(-1, -1)] * len(self.modes)
 
         self.currentChanged.connect(self.on_tab_change)
 
     def setup_ui(self) -> None:
+        self.addTab(self.classic, 'Classic')
+        self.addTab(self.levels, 'Levels')
+        self.addTab(self.color, 'Color')
+        self.addTab(self.color2, 'Color2')
+
         for mode in self.modes:
             mode.setup_ui()
 
@@ -134,7 +116,7 @@ class SimpleHistogramWidget(AbstractPlugin, QTabWidget):
         assert self.main.outputs
 
         for mode in self.modes:
-            mode.init_outputs()  # type: ignore
+            mode.init_outputs()
 
     def on_tab_change(self) -> None:
         idx, key = self.currentIndex(), (
