@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import cast
+
 from PyQt6.QtWidgets import QTabWidget
 from stgpytools import CustomStrEnum, CustomValueError
 from vspreview.core import Frame
@@ -29,34 +31,53 @@ class HistogramMode(CustomStrEnum):
 
     def apply(self, clip: vs.VideoNode) -> vs.VideoNode:
         """Apply the histogram mode to the clip."""
-        return self.func(clip)
+
+        hist_clip = self.func(clip)
+
+        width, height = self.size
+
+        if self is not HistogramMode.CLASSIC:
+            return hist_clip.std.CropAbs(width, height, clip.width)
+
+        hist_clip = hist_clip.std.Crop(clip.width)
+
+        return hist_clip.std.FlipVertical().std.Transpose()
 
     @property
     def func(self) -> VSFunctionNoArgs:
         """Get the histogram function."""
-        def upscale(clip: vs.VideoNode, ratio: int = 2) -> vs.VideoNode:
-            return clip.resize.Point(clip.width * ratio, clip.height * ratio)
 
         match self:
             case HistogramMode.CLASSIC:
-                return lambda clip: core.hist.Classic(clip).std.Crop(clip.width).std.FlipHorizontal().std.Transpose()
+                def hist_func(clip: vs.VideoNode) -> vs.VideoNode:
+                    return cast(vs.VideoNode, core.hist.Classic(clip))
             case HistogramMode.LEVELS:
-                return lambda clip: upscale(
-                    core.hist.Levels(clip).std.CropAbs(256, 226, clip.width),
-                    3
-                )
+                def hist_func(clip: vs.VideoNode) -> vs.VideoNode:
+                    return cast(vs.VideoNode, core.hist.Levels(clip))
             case HistogramMode.COLOR:
-                return lambda clip: upscale(
-                    core.hist.Color(clip).std.CropAbs(256, 256, clip.width),
-                    3
-                )
+                def hist_func(clip: vs.VideoNode) -> vs.VideoNode:
+                    return cast(vs.VideoNode, core.hist.Color(clip))
             case HistogramMode.COLOR2:
-                return lambda clip: upscale(
-                    core.hist.Color2(clip).std.CropAbs(256, 256, clip.width),
-                    3
-                )
+                def hist_func(clip: vs.VideoNode) -> vs.VideoNode:
+                    return cast(vs.VideoNode, core.hist.Color2(clip))
+            case _:
+                raise CustomValueError("Unknown histogram mode", self)
 
-        raise CustomValueError("Unknown histogram mode", self)
+        return cast(VSFunctionNoArgs, hist_func)
+
+    @property
+    def size(self) -> tuple[int, int]:
+        """Get the size of the histogram."""
+
+        match self:
+            case HistogramMode.CLASSIC:
+                return (-1, -1)
+            case HistogramMode.LEVELS:
+                return (256, 226)
+            case HistogramMode.COLOR | HistogramMode.COLOR2:
+                return (256, 256)
+
+        raise CustomValueError("Unknown histogram size", self)
 
 
 class HistogramViewPlugin(MappedNodesViewPlugin):
