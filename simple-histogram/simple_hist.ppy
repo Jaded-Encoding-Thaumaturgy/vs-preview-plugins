@@ -81,31 +81,15 @@ class HistogramMode(CustomStrEnum):
 
 
 class HistogramViewPlugin(MappedNodesViewPlugin):
+    def __init__(self, main: MainWindow, mode: HistogramMode) -> None:
+        super().__init__(main)
+        self.mode = mode
+
     def get_node(self, node: vs.VideoNode) -> vs.VideoNode:
-        return depth(node, 8)
+        return self.mode.apply(depth(node, 8))
 
     def init_outputs(self) -> None:
         assert self.main.outputs
-
-
-class ClassicHistogramPlugin(HistogramViewPlugin):
-    def get_node(self, node: vs.VideoNode) -> vs.VideoNode:
-        return HistogramMode.CLASSIC.apply(super().get_node(node))
-
-
-class LevelsHistogramPlugin(HistogramViewPlugin):
-    def get_node(self, node: vs.VideoNode) -> vs.VideoNode:
-        return HistogramMode.LEVELS.apply(super().get_node(node))
-
-
-class ColorHistogramPlugin(HistogramViewPlugin):
-    def get_node(self, node: vs.VideoNode) -> vs.VideoNode:
-        return HistogramMode.COLOR.apply(super().get_node(node))
-
-
-class Color2HistogramPlugin(HistogramViewPlugin):
-    def get_node(self, node: vs.VideoNode) -> vs.VideoNode:
-        return HistogramMode.COLOR2.apply(super().get_node(node))
 
 
 class SimpleHistogramWidget(AbstractPlugin, QTabWidget):
@@ -114,23 +98,19 @@ class SimpleHistogramWidget(AbstractPlugin, QTabWidget):
     def __init__(self, main: MainWindow) -> None:
         super().__init__(main)
 
-        self.classic = ClassicHistogramPlugin(main)
-        self.levels = LevelsHistogramPlugin(main)
-        self.color = ColorHistogramPlugin(main)
-        self.color2 = Color2HistogramPlugin(main)
-
-        self.modes = (self.classic, self.levels, self.color, self.color2)
+        self.modes = [
+            HistogramViewPlugin(main, HistogramMode.CLASSIC),
+            HistogramViewPlugin(main, HistogramMode.LEVELS),
+            HistogramViewPlugin(main, HistogramMode.COLOR),
+            HistogramViewPlugin(main, HistogramMode.COLOR2)
+        ]
         self.cache = [(-1, -1)] * len(self.modes)
 
         self.currentChanged.connect(self.on_tab_change)
 
     def setup_ui(self) -> None:
-        self.addTab(self.classic, 'Classic')
-        self.addTab(self.levels, 'Levels')
-        self.addTab(self.color, 'Color')
-        self.addTab(self.color2, 'Color2')
-
-        for mode in self.modes:
+        for mode, name in zip(self.modes, ['Classic', 'Levels', 'Color', 'Color2']):
+            self.addTab(mode, name)
             mode.setup_ui()
 
     def init_outputs(self) -> None:
