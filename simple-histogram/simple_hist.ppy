@@ -1,0 +1,139 @@
+from __future__ import annotations
+
+from typing import cast
+
+from PyQt6.QtWidgets import QTabWidget
+from stgpytools import CustomStrEnum, CustomValueError
+from vspreview.core import Frame
+from vspreview.main import MainWindow
+from vspreview.plugins import AbstractPlugin, MappedNodesViewPlugin, PluginConfig
+from vstools import VSFunctionNoArgs, core, depth, vs
+
+__all__ = [
+    'SimpleHistogramWidget'
+]
+
+
+class HistogramMode(CustomStrEnum):
+    """Histogram modes."""
+
+    CLASSIC = 'classic'
+    """Classic histogram."""
+
+    LEVELS = 'levels'
+    """Levels histogram."""
+
+    COLOR = 'color'
+    """Color histogram."""
+
+    COLOR2 = 'color2'
+    """Color2 histogram."""
+
+    def apply(self, clip: vs.VideoNode) -> vs.VideoNode:
+        """Apply the histogram mode to the clip."""
+
+        hist_clip = self.func(clip)
+
+        width, height = self.size
+
+        if self is not HistogramMode.CLASSIC:
+            return hist_clip.std.CropAbs(width, height, clip.width)
+
+        hist_clip = hist_clip.std.Crop(clip.width)
+
+        return hist_clip.std.FlipVertical().std.Transpose()
+
+    @property
+    def func(self) -> VSFunctionNoArgs:
+        """Get the histogram function."""
+
+        match self:
+            case HistogramMode.CLASSIC:
+                def hist_func(clip: vs.VideoNode) -> vs.VideoNode:
+                    return cast(vs.VideoNode, core.hist.Classic(clip))
+            case HistogramMode.LEVELS:
+                def hist_func(clip: vs.VideoNode) -> vs.VideoNode:
+                    return cast(vs.VideoNode, core.hist.Levels(clip))
+            case HistogramMode.COLOR:
+                def hist_func(clip: vs.VideoNode) -> vs.VideoNode:
+                    return cast(vs.VideoNode, core.hist.Color(clip))
+            case HistogramMode.COLOR2:
+                def hist_func(clip: vs.VideoNode) -> vs.VideoNode:
+                    return cast(vs.VideoNode, core.hist.Color2(clip))
+            case _:
+                raise CustomValueError("Unknown histogram mode", self)
+
+        return cast(VSFunctionNoArgs, hist_func)
+
+    @property
+    def size(self) -> tuple[int, int]:
+        """Get the size of the histogram."""
+
+        match self:
+            case HistogramMode.CLASSIC:
+                return (-1, -1)
+            case HistogramMode.LEVELS:
+                return (256, 226)
+            case HistogramMode.COLOR | HistogramMode.COLOR2:
+                return (256, 256)
+
+        raise CustomValueError("Unknown histogram size", self)
+
+
+class HistogramViewPlugin(MappedNodesViewPlugin):
+    def __init__(self, main: MainWindow, mode: HistogramMode) -> None:
+        super().__init__(main)
+        self.mode = mode
+
+    def get_node(self, node: vs.VideoNode) -> vs.VideoNode:
+        return self.mode.apply(depth(node, 8))
+
+    def init_outputs(self) -> None:
+        assert self.main.outputs
+
+
+class SimpleHistogramWidget(AbstractPlugin, QTabWidget):
+    _config = PluginConfig('dev.lightarrowsexe.simple_histogram', 'Histogram')
+
+    def __init__(self, main: MainWindow) -> None:
+        super().__init__(main)
+
+        self.modes = [
+            HistogramViewPlugin(main, HistogramMode.CLASSIC),
+            HistogramViewPlugin(main, HistogramMode.LEVELS),
+            HistogramViewPlugin(main, HistogramMode.COLOR),
+            HistogramViewPlugin(main, HistogramMode.COLOR2)
+        ]
+        self.cache = [(-1, -1)] * len(self.modes)
+
+        self.currentChanged.connect(self.on_tab_change)
+
+    def setup_ui(self) -> None:
+        for mode, name in zip(self.modes, ['Classic', 'Levels', 'Color', 'Color2']):
+            self.addTab(mode, name)
+            mode.setup_ui()
+
+    def init_outputs(self) -> None:
+        assert self.main.outputs
+
+        for mode in self.modes:
+            mode.init_outputs()
+
+    def on_tab_change(self) -> None:
+        idx, key = self.currentIndex(), (
+            int(self.main.current_output.last_showed_frame), self.main.current_output.index
+        )
+        if self.cache[idx] != key:
+            if self.cache[idx][1] != key[1]:
+                self.modes[idx].on_current_output_changed(key[1], self.cache[idx][1])
+            self.modes[idx].on_current_frame_changed(self.main.current_output.last_showed_frame)
+
+    def on_current_frame_changed(self, frame: Frame) -> None:
+        idx = self.currentIndex()
+        self.modes[idx].on_current_frame_changed(frame)
+        self.cache[idx] = (int(frame), self.main.current_output.index)
+
+    def on_current_output_changed(self, index: int, prev_index: int) -> None:
+        idx = self.currentIndex()
+        self.modes[idx].on_current_output_changed(index, prev_index)
+        self.cache[idx] = (int(self.main.current_output.last_showed_frame), index)
