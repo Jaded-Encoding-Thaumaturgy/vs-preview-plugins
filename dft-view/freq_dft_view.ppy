@@ -26,7 +26,7 @@ class DFTViewPlugin(MappedNodesViewPlugin):
             return planes[0].fftspectrum_rs.FFTSpectrum()
 
         planes = [
-            c.fftspectrum_rs.FFTSpectrum().text.FrameProps()
+            c.fftspectrum_rs.FFTSpectrum().text.Text(text=k)
             for k, c in zip(node.format.name, planes)
             ]
 
