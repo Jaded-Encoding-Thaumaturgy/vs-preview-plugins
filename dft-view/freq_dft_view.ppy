@@ -10,27 +10,25 @@ __all__ = [
 
 class DFTViewPlugin(MappedNodesViewPlugin):
     _config = PluginConfig('dev.setsugen.fft_view', 'DFT View')
+    _url = 'https://github.com/sgt0/vapoursynth-fftspectrum-rs'
 
     def get_node(self, node: vs.VideoNode) -> vs.VideoNode:
-        import numpy as np
-        from cv2 import DFT_COMPLEX_OUTPUT, dft  # type: ignore
 
+        if not hasattr(vs.core, 'fftspectrum_rs'):
+            raise AttributeError(
+                'The required plugin "fftspectrum_rs" is not installed. '
+                f'Please install it from: {self._url}'
+            )
+            
         planes = split(depth(node, 32))
 
-        def _to_polar(f: vs.VideoFrame, n: int) -> vs.VideoFrame:
-            src = np.asarray(f[0])
-            dft_shift = np.fft.fftshift(dft(src, flags=DFT_COMPLEX_OUTPUT))
-            mag = np.sqrt(np.power(dft_shift[:, :, 1], 2), np.power(dft_shift[:, :, 0], 2))
-            dst = f.copy()
-            np.copyto(np.asarray(dst[0]), np.log(mag) / 10)
-            return dst
-
         if len(planes) == 1:
-            y = planes[0]
+            return planes[0].fftspectrum_rs.FFTSpectrum()
 
-            return y.std.ModifyFrame(y, _to_polar)
-
-        planes = [c.std.ModifyFrame(c, _to_polar).text.Text(text=k) for k, c in zip(node.format.name, planes)]
+        planes = [
+            c.fftspectrum_rs.FFTSpectrum().text.Text(text=k)
+            for k, c in zip(node.format.name, planes)
+            ]
 
         subsampling = node.format.subsampling_w, node.format.subsampling_h
 
