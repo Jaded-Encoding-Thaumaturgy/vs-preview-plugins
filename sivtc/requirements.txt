@@ -1,1 +1,0 @@
-vsdeinterlace>=0.7.0
