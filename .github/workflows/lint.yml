@@ -39,4 +39,4 @@ jobs:
           pip install -r requirements-dev.txt
 
       - name: Running ruff
-        run: ruff check . --include '*.ppy'
+        run: ruff check .
