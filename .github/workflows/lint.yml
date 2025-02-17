@@ -34,7 +34,7 @@ jobs:
         run: |
           python3 -m pip install --upgrade pip
           pip install vapoursynth-portable==${{ matrix.vs-versions }}
-          for /r %i in (requirements.txt) do pip install -r "%i"
+          Get-ChildItem -Recurse -Filter requirements.txt | ForEach-Object { pip install -r $_.FullName }
           pip install -r requirements-dev.txt
 
       - name: Running ruff
