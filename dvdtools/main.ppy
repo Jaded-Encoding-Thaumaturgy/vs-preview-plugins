@@ -1,0 +1,35 @@
+from __future__ import annotations
+
+from PyQt6.QtWidgets import QTabWidget
+
+from vspreview.main import MainWindow
+from vspreview.plugins import AbstractPlugin, PluginConfig
+
+from .components.iso_browser.tab import IsoBrowserTab
+# from .tabs.sar_tools import SarToolsTab
+
+__all__ = [
+    'DVDToolsPlugin'
+]
+
+
+class DVDToolsPlugin(AbstractPlugin, QTabWidget):
+    """VSPreview plugin for DVD helpers and tooling."""
+
+    _config = PluginConfig('dev.lightarrowsexe.dvdtools', 'DVD Tools')
+
+    def __init__(self, main: MainWindow) -> None:
+        super().__init__(main)
+
+        self.iso_browser = IsoBrowserTab(self)
+        # self.sar_tools = SarToolsTab(self)
+
+    def setup_ui(self) -> None:
+        self.main_tab = IsoBrowserTab(self)
+
+        self.setUsesScrollButtons(False)
+
+        self.addTab(self.main_tab, 'ISO Browser')
+        # self.addTab(self.sar_tools, 'SAR Tools')
+
+        self.settings.globals.settings = self.main_tab
