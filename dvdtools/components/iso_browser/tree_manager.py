@@ -2,7 +2,7 @@ from logging import debug, error
 from traceback import format_exc
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QTreeWidget, QTreeWidgetItem, QFileDialog
+from PyQt6.QtWidgets import QTreeWidget, QTreeWidgetItem
 from vspreview import set_timecodes
 from vssource import Title
 
