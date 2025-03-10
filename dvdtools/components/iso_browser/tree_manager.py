@@ -4,6 +4,7 @@ from traceback import format_exc
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QTreeWidget, QTreeWidgetItem
 from vspreview import set_timecodes
+from vspreview.core import Frame
 from vssource import Title
 
 __all__ = [
@@ -407,9 +408,8 @@ class ISOTreeManager:
         if not (data := item.data(0, Qt.ItemDataRole.UserRole)) or 'frame' not in data:
             return
 
-        # TODO: Figure out why this is not working
-        main = self.parent.plugin.main
-        main.current_output.frame = data['frame']
+        debug(debug_mapping['switching_frame'].format(data['frame']))
+        self.parent.plugin.main.switch_frame(Frame(data['frame']))
 
     def clear(self) -> None:
         """Clear the tree widgets."""
@@ -464,4 +464,5 @@ debug_mapping: dict[str, str] = {
     'current_title_info': 'Current title_info before update: {}',
     'updated_title_info': 'Updated title_info: {}',
     'updating_chapter_end': 'Updating chapter end: title_key={}, value={}',
+    'switching_frame': 'Switching to chapter frame {}',
 }
