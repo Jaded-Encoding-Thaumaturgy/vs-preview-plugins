@@ -26,6 +26,7 @@ with "ISO Browser" in the title.
 - Load ISO and IFO files
 - Navigate through titles and angles
 - View title metadata, including audio tracks and chapters
+- Navigate to chapters
 - Preview video node (overrides the default output node)
 - Dump titles and angles to files, with options to split by chapters
 - Dump all titles/angles to files at once (no chapter splitting)
@@ -33,7 +34,6 @@ with "ISO Browser" in the title.
 
 ### Planned
 
-- Navigation to chapters (depends on vspreview)
 - Preview audio nodes (depends on vspreview)
 - Implement some way to open vspreview without having to pre-load a video node (depends on vspreview)
 - Remux VOBSub when dumping (depends on FFmpeg support)
