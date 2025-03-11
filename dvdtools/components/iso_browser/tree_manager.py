@@ -252,9 +252,7 @@ class ISOTreeManager:
         # Update FFmpeg handler chapter values
         self.parent.ffmpeg_handler.chapter_start = self.parent.chapter_start_spin.value() if has_chapters else None
         self.parent.ffmpeg_handler.chapter_end = self.parent.chapter_end_spin.value() if has_chapters else None
-
-        if not self.parent.iso_path.suffix.lower() == '.ifo':
-            self.parent.dump_title_button.setEnabled(bool(info['audio_tracks']))
+        self.parent.dump_title_button.setEnabled(bool(info['audio_tracks']))
 
         self._update_info_label(info)
         self._update_outputs(title_idx, angle)

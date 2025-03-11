@@ -298,9 +298,7 @@ class FFmpegHandler:
         if angle is not None:
             cmd.extend(['-angle', str(angle)])
 
-        # Properly quote the input path
-        quoted_input = f'"{file_path}"'
-        cmd.extend(['-i', quoted_input])
+        cmd.extend(['-i', f'"{file_path}"'])
 
         cmd.extend([
             '-map', '0:v:0',
@@ -408,8 +406,13 @@ class FFmpegHandler:
     def _dump_title(self, title_idx: int, output_path: str, angle: int | None = None) -> None:
         """Dump a single title."""
 
-        cmd = self._build_ffmpeg_command(self.parent.iso_path.to_str(), output_path, angle, title_idx)
+        input_path = (
+            self.parent.iso_path.get_folder()
+            if self.parent.iso_path.suffix.lower() == '.ifo'
+            else self.parent.iso_path
+        )
 
+        cmd = self._build_ffmpeg_command(input_path.to_str(), output_path, angle, title_idx)
         self._run_ffmpeg_process(cmd)
 
     @property

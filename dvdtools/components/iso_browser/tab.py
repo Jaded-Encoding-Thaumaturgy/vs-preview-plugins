@@ -96,7 +96,7 @@ class IsoBrowserTab(AbstractSettingsWidget):
 
             # For IFO files, use the DVD root directory (2 levels up)
             # For ISO files, use the ISO file path directly
-            self.iso_file = IsoFile(self.iso_path.parent.parent if suffix == '.ifo' else self.iso_path)
+            self.iso_file = IsoFile(self.iso_path.parent.parent if suffix.lower() == '.ifo' else self.iso_path)
 
             if progress.wasCanceled():
                 raise Exception(error_mapping['operation_cancelled'])
@@ -153,9 +153,7 @@ class IsoBrowserTab(AbstractSettingsWidget):
 
             # Finish up
             self.tree_manager.tree.expandAll()
-
-            if not self.iso_path.suffix.lower() == '.ifo':
-                self.dump_all_titles_button.setEnabled(total_titles > 0)
+            self.dump_all_titles_button.setEnabled(total_titles > 0)
 
             progress.setValue(100)
 
@@ -191,7 +189,7 @@ class IsoBrowserTab(AbstractSettingsWidget):
     def _generate_script(self, title_num: int, angle: int | None) -> str:
         """Generate a VapourSynth script for the given title and angle, as well as other relevant methods."""
 
-        iso_path = self.iso_path.parent.parent if self.iso_path.suffix == '.ifo' else self.iso_path
+        iso_path = self.iso_path.parent.parent if self.iso_path.suffix.lower() == '.ifo' else self.iso_path
         iso_path = iso_path.as_posix().replace('"', '\\"').replace("'", "\\'")
 
         # Build core code snippet
