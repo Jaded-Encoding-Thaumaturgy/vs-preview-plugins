@@ -1,10 +1,10 @@
 # DVD Tools
 
-A collection of tools for working with DVDs.
+A collection of VSPreview plugins for working with DVDs.
 
 ## ISO Browser
 
-A plugin for browsing DVDs.
+A tool for browsing DVDs.
 Supports everything `vssource.IsoFile` supports.
 Loading an ISO file allows you to dump any title or angle to a file.
 
@@ -50,7 +50,7 @@ in the relevant source code!
 ## SAR Helper
 
 (Planned)
-A plugin to help you figure out the SAR of your video.
+A tool to help you figure out the SAR of your video.
 
 ### Features
 
