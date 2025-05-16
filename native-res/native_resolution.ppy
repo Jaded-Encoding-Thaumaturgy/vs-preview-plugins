@@ -23,7 +23,7 @@ from vspreview.plugins import AbstractPlugin, PluginConfig
 from jetpytools import R, T, mod2, complex_hash
 from vstools import (
     ClipFramesCache, ClipsCache, DynamicClipsCache, Matrix, clip_data_gather, core,
-    depth, get_y, padder, plane, vs, vs_object, FieldBased, get_w, get_h
+    depth, padder, plane, vs, vs_object, FieldBased, get_w, get_h
 )
 
 __all__ = [
