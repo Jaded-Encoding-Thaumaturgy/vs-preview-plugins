@@ -22,7 +22,7 @@ from vspreview.models import GeneralModel
 from vspreview.plugins import AbstractPlugin, PluginConfig
 from jetpytools import R, T, mod2, complex_hash
 from vstools import (
-    ClipFramesCache, ClipsCache, Colorspace, DynamicClipsCache, Matrix, clip_data_gather, core,
+    ClipFramesCache, ClipsCache, DynamicClipsCache, Matrix, clip_data_gather, core,
     depth, get_y, padder, plane, vs, vs_object, FieldBased, get_w, get_h
 )
 
@@ -420,7 +420,7 @@ class FrequencyAnalyzer(ExtendedWidget):
 
 class RescaleWorkClip(DynamicClipsCache[vs.VideoNode]):
     def get_clip(self, key: vs.VideoNode) -> vs.VideoNode:
-        return get_y(Colorspace.YUV(depth(key, 32), matrix_in=Matrix.from_video(key), matrix=Matrix.BT709))
+        return Bilinear.resample(key, vs.GRAYS, Matrix.BT709, Matrix.from_video(key))
 
 
 class RescaleErrorRunner(QObject):
