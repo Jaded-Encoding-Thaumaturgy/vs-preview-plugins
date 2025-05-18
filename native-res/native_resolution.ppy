@@ -425,7 +425,7 @@ class FrequencyAnalyzer(ExtendedWidget):
 
 class RescaleWorkClip(DynamicClipsCache[vs.VideoNode, vs.VideoNode]):
     def get_clip(self, key: vs.VideoNode) -> vs.VideoNode:
-        return Bilinear.resample(key, vs.GRAYS, Matrix.BT709, Matrix.from_video(key))
+        return core.resize.Bilinear(key, format=vs.GRAYS, matrix=Matrix.BT709, matrix_in=Matrix.from_video(key))
 
 
 class RescaleErrorRunner(QObject):
