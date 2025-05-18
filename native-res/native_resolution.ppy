@@ -1019,15 +1019,17 @@ class NativeResolutionPlugin(AbstractPlugin, QTabWidget):
             mode.setup_ui()
 
     def add_shortcuts(self) -> None:
-        self.add_shortcut(
-            Qt.Key.Key_Escape, lambda: self.underMouse() and self.modes[self.currentIndex()].canvas.render(None, False)  # type: ignore
-        )
-        self.add_shortcut(
-            Qt.Key.Key_Enter, lambda: self.underMouse() and self.currentIndex() == 0 and self.rescale.render_canvas()  # type: ignore
-        )
-        self.add_shortcut(
-            Qt.Key.Key_Return, lambda: self.underMouse() and self.currentIndex() == 0 and self.rescale.render_canvas()  # type: ignore
-        )
+        def reset_zoom() -> None:
+            if self.underMouse():
+                self.modes[self.currentIndex()].canvas.render(None, False)
+
+        def render_canvas_on_rescale_error() -> None:
+            if self.underMouse() and self.currentIndex() == 0:
+                self.rescale.render_canvas()
+
+        self.add_shortcut("Reset zoom", self, reset_zoom, QKeySequence(Qt.Key.Key_Escape))
+        self.add_shortcut("Render canvas", self, render_canvas_on_rescale_error, QKeySequence(Qt.Key.Key_Enter))
+        self.add_shortcut("Render canvas", self, render_canvas_on_rescale_error, QKeySequence(Qt.Key.Key_Return))
 
     def init_outputs(self) -> None:
         assert self.main.outputs
