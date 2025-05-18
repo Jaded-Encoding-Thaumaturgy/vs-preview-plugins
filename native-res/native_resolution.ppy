@@ -5,10 +5,14 @@ from threading import Timer
 from typing import Any, Callable, Sequence, cast
 
 import numpy as np
+
+from jetpytools import R, T, complex_hash, mod2
+from numpy.typing import NDArray
 from PyQt6.QtCore import QObject, Qt, QThreadPool, pyqtSignal
+from PyQt6.QtGui import QKeySequence
 from PyQt6.QtWidgets import QFrame, QLabel, QTabWidget, QWidget
-from scipy.fft import dct  # type: ignore
-from scipy.signal import argrelextrema  # type: ignore
+from scipy.fft import dct
+from scipy.signal import argrelextrema
 from vskernels import (
     AdobeBicubic, Bicubic, BicubicSharp, Bilinear, Catrom, FFmpegBicubic, Hermite, Kernel, KernelT, Lanczos, Mitchell
 )
@@ -20,10 +24,9 @@ from vspreview.core.vsenv import Runner
 from vspreview.main import MainWindow
 from vspreview.models import GeneralModel
 from vspreview.plugins import AbstractPlugin, PluginConfig
-from jetpytools import R, T, mod2, complex_hash
 from vstools import (
-    ClipFramesCache, ClipsCache, DynamicClipsCache, Matrix, clip_data_gather, core,
-    depth, padder, plane, vs, vs_object, FieldBased, get_w, get_h
+    ClipFramesCache, ClipsCache, DynamicClipsCache, FieldBased, Matrix, clip_data_gather, core, depth, get_h, get_w,
+    padder, plane, vs, vs_object
 )
 
 __all__ = [
@@ -72,8 +75,11 @@ class FrequencyCanvas(PlottingCanvasDefaultFrame):
     def on_mouse_moved(self, event: PlotMouseEvent) -> None:
         width_check = self.plugin.dimension_switch.isChecked()
 
+        assert event.xdata is not None
+
         self.plugin.position.setText(
-            f'{"Width" if width_check else "Height"}: {int(event.xdata)}, Error: {self.axes.lines[0].get_ydata()[int(event.xdata)]:.3f}'
+            f'{"Width" if width_check else "Height"}: {int(event.xdata)}, '
+            f'Error: {self.axes.lines[0].get_ydata()[int(event.xdata)]:.3f}'  # type: ignore
         )
 
     def _render(self, frame: Frame) -> None:
@@ -99,7 +105,7 @@ class FrequencyCanvas(PlottingCanvasDefaultFrame):
         for inter, dct_base, color in [(inter_norm, dct, 'r'), (inter_cross, dct_cross, 'b')]:
             if len(inter):
                 self.axes.scatter(
-                    inter, dct_base[inter], linewidth=0.3, s=self.plugin.check_radius, c=color  # type: ignore
+                    inter, dct_base[inter], linewidth=0.3, s=self.plugin.check_radius, c=color
                 )
 
 
@@ -343,8 +349,7 @@ class FrequencyAnalyzer(ExtendedWidget):
         if generic:
             del self.clip_cache[self.curr_clip]
 
-    def get_dct_value(self, frame_num: int) -> tuple[Any, Any, Any | None]:  # type: ignore
-
+    def get_dct_value(self, frame_num: int) -> tuple[Any, Any, Any | None]:
         cut_clip = self.crop_clip
         up_scale = self.filter_rate_spinbox.value()
         cut_rate = self.cull_rate_spinbox.value()
@@ -399,17 +404,17 @@ class FrequencyAnalyzer(ExtendedWidget):
 
         return dct_v, dct_cross, dct_up
 
-    def get_inter(self, dct: np.array, dct_up: np.array, min_val: int, max_val: int) -> list[int]:
+    def get_inter(self, dct: NDArray[Any], dct_up: NDArray[Any] | None, min_val: int, max_val: int) -> NDArray[Any]:
         max_index = argrelextrema(dct, np.less, order=self.check_radius)[0]
         min_index = argrelextrema(dct, np.greater, order=self.check_radius)[0]
 
         if dct_up is not None:
-            max_index_up = argrelextrema(dct_up[:dct.shape[0]], np.less, order=self.check_radius)[0]  # type: ignore
+            max_index_up = argrelextrema(dct_up[:dct.shape[0]], np.less, order=self.check_radius)[0]
             min_index_up = argrelextrema(dct_up[:dct.shape[0]], np.greater, order=self.check_radius)[0]
         else:
             max_index_up = min_index_up = []  # type: ignore
 
-        return np.array([  # type: ignore
+        return np.array([
             x for x in (*max_index, *min_index)
             if (min_val < x < max_val) and x not in max_index_up and x not in min_index_up
         ])
@@ -418,7 +423,7 @@ class FrequencyAnalyzer(ExtendedWidget):
         assert self.main.outputs
 
 
-class RescaleWorkClip(DynamicClipsCache[vs.VideoNode]):
+class RescaleWorkClip(DynamicClipsCache[vs.VideoNode, vs.VideoNode]):
     def get_clip(self, key: vs.VideoNode) -> vs.VideoNode:
         return Bilinear.resample(key, vs.GRAYS, Matrix.BT709, Matrix.from_video(key))
 
@@ -491,16 +496,19 @@ class RescaleErrorCanvas(PlottingCanvasDefaultFrame):
 
         width_check = 'h' not in self.plugin.rescale_mode
 
-        close_error = [(i, abs(x - event.xdata)) for i, x in enumerate(attempts)]
+        assert event.xdata is not None
+
+        close_error = [(i, abs(x - event.xdata)) for i, x in enumerate(attempts)]  # type: ignore
         close_error.sort(key=lambda v: v[1])
 
         error_idx = close_error[0][0]
 
         self.plugin.position.setText(
-            f'{"Width" if width_check else "Height"}: {attempts[error_idx]:.{self.plugin.step_decimals}f}, Error: {errors[error_idx]:.16f}'
+            f'{"Width" if width_check else "Height"}: '
+            f'{attempts[error_idx]:.{self.plugin.step_decimals}f}, Error: {errors[error_idx]:.16f}'  # type: ignore
         )
 
-    def _render(self, frame: Frame) -> None:  # type: ignore
+    def _render(self, frame: Frame) -> None:
         self.plugin.set_visibility(False, False, True)
 
         assert (data := self.plugin.current_data[self.plugin.main.current_output.index][int(frame)])
@@ -548,10 +556,10 @@ class DynamicDataCache(vs_object, dict[T, R]):
 
 
 class RescaleErrorClipCache(DynamicDataCache[
-    tuple[vs.VideoNode, Sequence[tuple[float, float]], Kernel, bool, str, FieldBased], list[vs.VideoNode]
+    tuple[vs.VideoNode, Sequence[tuple[float, float]], Kernel, bool, str, int, FieldBased], list[vs.VideoNode]
 ]):
     def get_data(
-        self, args: tuple[vs.VideoNode, Sequence[tuple[float, float]], Kernel, bool, str, FieldBased]
+        self, args: tuple[vs.VideoNode, Sequence[tuple[float, float]], Kernel, bool, str, int, FieldBased]
     ) -> list[vs.VideoNode]:
         clip, attempts, kernel, is_integer, mode, bs_parity, field_based = args
 
@@ -870,7 +878,11 @@ class RescaleErrorAnalyzer(ExtendedWidget):
             self.workers[frame].update.connect(self.progress_hook(frame, self.main.current_output.index))
             self.workers[frame].finished.connect(self.render_hook(frame, self.main.current_output.index))
 
-            QThreadPool.globalInstance().start(Runner(self.workers[frame].run))
+            pool = QThreadPool.globalInstance()
+
+            assert pool
+
+            pool.start(Runner(self.workers[frame].run))
 
     def safe_render(self, frame: Frame | None = None) -> None:
         if not (self.errors_loading.isVisible() or self.display.isVisible()):
@@ -930,7 +942,7 @@ class RescaleErrorAnalyzer(ExtendedWidget):
             return 0
         return max(str(step)[::-1].find("."), 0)
 
-    def _get_values(self) -> tuple[str, int, float, float, float]:
+    def _get_values(self) -> tuple[str, int, int, float, float, float]:
         if 'h' in self.rescale_mode:
             start = self.height_min_spinbox.value()
             stop = self.height_max_spinbox.value()
@@ -1035,7 +1047,7 @@ class NativeResolutionPlugin(AbstractPlugin, QTabWidget):
         assert self.main.outputs
 
         for mode in self.modes:
-            mode.init_outputs()  # type: ignore
+            mode.init_outputs()
 
     def on_tab_change(self) -> None:
         idx, key = self.currentIndex(), (
