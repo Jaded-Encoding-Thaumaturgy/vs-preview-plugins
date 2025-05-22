@@ -14,7 +14,7 @@ from PyQt6.QtWidgets import QFrame, QLabel, QTabWidget, QWidget
 from scipy.fft import dct
 from scipy.signal import argrelextrema
 from vskernels import (
-    AdobeBicubic, Bicubic, BicubicSharp, Bilinear, Catrom, FFmpegBicubic, Hermite, Kernel, KernelT, Lanczos, Mitchell
+    AdobeBicubic, Bicubic, BicubicSharp, Bilinear, Catrom, FFmpegBicubic, Hermite, Kernel, KernelLike, Lanczos, Mitchell
 )
 from vspreview.core import (
     ComboBox, CroppingInfo, DoubleSpinBox, ExtendedWidget, Frame, HBoxLayout, PlotMouseEvent,
@@ -50,7 +50,7 @@ common_kernels = [
 ]
 
 
-def get_kernel_name(kernel: KernelT) -> str:
+def get_kernel_name(kernel: KernelLike) -> str:
     name = kernel.__class__.__name__
 
     if name.lower().endswith('bicubic'):
