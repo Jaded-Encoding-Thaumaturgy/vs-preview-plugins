@@ -200,7 +200,7 @@ class ISOTreeManager:
 
         return audio_tracks
 
-    def _on_tree_item_selected(self, item: QTreeWidgetItem) -> None:
+    def _on_tree_item_selected(self, item: QTreeWidgetItem | None) -> None:
         """Handle tree item selection."""
 
         if not item:
@@ -397,7 +397,7 @@ class ISOTreeManager:
 
             debug(debug_mapping['updated_title_info'].format(self.parent.title_info[title_key]))
 
-    def _on_chapter_selected(self, item: QTreeWidgetItem) -> None:
+    def _on_chapter_selected(self, item: QTreeWidgetItem | None) -> None:
         """Handle chapter selection by jumping to the chapter frame."""
 
         if not item:
