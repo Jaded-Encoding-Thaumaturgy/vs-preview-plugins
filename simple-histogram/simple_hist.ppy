@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import cast
 
 from PyQt6.QtWidgets import QTabWidget
-from stgpytools import CustomStrEnum, CustomValueError
+from jetpytools import CustomStrEnum, CustomValueError
 from vspreview.core import Frame
 from vspreview.main import MainWindow
 from vspreview.plugins import AbstractPlugin, MappedNodesViewPlugin, PluginConfig
@@ -85,7 +85,7 @@ class HistogramViewPlugin(MappedNodesViewPlugin):
         super().__init__(main)
         self.mode = mode
 
-    def get_node(self, node: vs.VideoNode) -> vs.VideoNode:
+    def get_node(self, node: vs.VideoNode) -> vs.VideoNode:  # type: ignore
         return self.mode.apply(depth(node, 8))
 
     def init_outputs(self) -> None:
