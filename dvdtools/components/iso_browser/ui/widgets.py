@@ -37,7 +37,7 @@ def create_widgets(parent) -> None:
     parent.info_button.setFixedWidth(20)
     parent.info_button.setToolTip('Click to learn more about remuxing DVDs (opens in browser)')
     parent.info_button.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(
-        'https://jaded-encoding-thaumaturgy.github.io/JET-guide/dvd-remux/sources/dvd-remux'
+        'https://jaded-encoding-thaumaturgy.github.io/JET-guide/master/sources/dvd/remuxing/'
     )))
 
     parent.info_label = QLabel('Select a title to view details')

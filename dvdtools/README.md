@@ -9,7 +9,7 @@ Supports everything `vssource.IsoFile` supports.
 Loading an ISO file allows you to dump any title or angle to a file.
 
 For more information,
-see the [JET guide on DVD Remuxing](https://jaded-encoding-thaumaturgy.github.io/JET-guide/dvd-remux/sources/dvd-remux/)
+see the [JET guide on DVD Remuxing](https://jaded-encoding-thaumaturgy.github.io/JET-guide/master/sources/dvd/remuxing/)
 
 Spot an issue?
 Please leave an issue
