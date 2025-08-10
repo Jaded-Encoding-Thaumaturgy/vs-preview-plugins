@@ -11,6 +11,7 @@ class DFTViewPlugin(MappedNodesViewPlugin):
 
     _config = PluginConfig("dev.setsugen.fft_view", "DFT View")
     _url = "https://github.com/sgt0/vapoursynth-fftspectrum-rs"
+    _autofit = True
 
     @initialize_input(bits=32, dither_type=DitherType.NONE)
     def get_node(self, node: vs.VideoNode) -> vs.VideoNode:
