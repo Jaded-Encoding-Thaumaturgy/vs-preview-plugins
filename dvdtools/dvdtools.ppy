@@ -8,9 +8,7 @@ from .components.iso_browser.tab import IsoBrowserTab
 
 # from .tabs.sar_tools import SarToolsTab
 
-__all__ = [
-    "DVDToolsPlugin"
-]
+__all__ = ["DVDToolsPlugin"]
 
 
 class DVDToolsPlugin(AbstractPlugin, QTabWidget):
