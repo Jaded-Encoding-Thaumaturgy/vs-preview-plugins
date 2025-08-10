@@ -6,9 +6,7 @@ from vspreview.core import Frame, HBoxLayout, SpinBox, Stretch, Switch, VBoxLayo
 from vspreview.plugins import MappedNodesPlugin, PluginConfig, PluginGraphicsView
 from vstools import vs
 
-__all__ = [
-    "SIVTCPlugin"
-]
+__all__ = ["SIVTCPlugin"]
 
 
 class SIVTCPlugin(MappedNodesPlugin, QWidget):
@@ -22,14 +20,13 @@ class SIVTCPlugin(MappedNodesPlugin, QWidget):
 
         self.tff_switch = Switch(state_texts=("TFF", "BFF", 2), clicked=self.reset)
 
-        VBoxLayout(self, [
-            HBoxLayout([
-                self.tff_switch, self.get_separator(),
-                QLabel("Cycle:"), self.cycle_spinbox,
-                Stretch(2)
-            ]),
-            self.view
-        ])
+        VBoxLayout(
+            self,
+            [
+                HBoxLayout([self.tff_switch, self.get_separator(), QLabel("Cycle:"), self.cycle_spinbox, Stretch(2)]),
+                self.view,
+            ],
+        )
 
     def get_node(self, node: vs.VideoNode) -> vs.VideoNode:
         return sivtc(node, self.cycle_spinbox.value(), not self.tff_switch.isChecked())

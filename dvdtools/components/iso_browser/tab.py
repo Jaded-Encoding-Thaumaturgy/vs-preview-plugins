@@ -34,7 +34,7 @@ class IsoBrowserTab(AbstractSettingsWidget):
         "file_label",
         "info_label",
         "load_button",
-        "tree_manager"
+        "tree_manager",
     )
 
     def __init__(self, plugin: AbstractPlugin) -> None:
@@ -73,8 +73,7 @@ class IsoBrowserTab(AbstractSettingsWidget):
         """Handle ISO file loading."""
 
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "Select ISO/IFO file", self.last_source_path.to_str(),
-            "DVD files (*.iso *.ifo);;All files (*.*)"
+            self, "Select ISO/IFO file", self.last_source_path.to_str(), "DVD files (*.iso *.ifo);;All files (*.*)"
         )
 
         if not file_path:
@@ -149,8 +148,9 @@ class IsoBrowserTab(AbstractSettingsWidget):
                     items_processed += 1
 
                     if angle_count > 1:
-                        progress.setLabelText(debug_mapping["loading_title_angle"].\
-                            format(title_idx, total_titles, angle + 1, angle_count))
+                        progress.setLabelText(
+                            debug_mapping["loading_title_angle"].format(title_idx, total_titles, angle + 1, angle_count)
+                        )
                     else:
                         progress.setLabelText(debug_mapping["loading_title"].format(title_idx, total_titles))
 
@@ -166,7 +166,9 @@ class IsoBrowserTab(AbstractSettingsWidget):
         except Exception as e:
             error(error_mapping["load_failed"].format(dialog_texts["error"], e, format_exc()))
             self._reset_iso_state()
-            QMessageBox.critical(self, "Error", error_mapping["load_failed_dialog"].format(dialog_texts["error"], str(e)))
+            QMessageBox.critical(
+                self, "Error", error_mapping["load_failed_dialog"].format(dialog_texts["error"], str(e))
+            )
         finally:
             if "progress" in locals():
                 progress.close()
@@ -200,7 +202,8 @@ class IsoBrowserTab(AbstractSettingsWidget):
 
         # Build core code snippet
         script = [
-            "from vssource import IsoFile", "",
+            "from vssource import IsoFile",
+            "",
             f'iso = IsoFile("{iso_path}")',
         ]
 
@@ -209,7 +212,7 @@ class IsoBrowserTab(AbstractSettingsWidget):
         if angle is not None:
             title_args += [f"angle={angle}"]
 
-        script += [f'title = iso.get_title({", ".join(title_args)})']
+        script += [f"title = iso.get_title({', '.join(title_args)})"]
 
         # Add chapter splitting if needed
         start_chapter = self.chapter_start_spin.value()
@@ -273,10 +276,8 @@ class IsoBrowserTab(AbstractSettingsWidget):
             if self.plugin.main.current_output.node is not self.current_title.video:
                 main = self.plugin.main
                 new_output = main.outputs[index].with_node(self.current_title.video)
-                new_output.name = (
-                    f"Title {self.current_title._title}"
-                    + (f" Angle {self.current_title.angle}"
-                       if hasattr(self.current_title, "angle") else "")
+                new_output.name = f"Title {self.current_title._title}" + (
+                    f" Angle {self.current_title.angle}" if hasattr(self.current_title, "angle") else ""
                 )
                 new_output.index = index
                 main.outputs.items[index] = new_output
@@ -336,7 +337,9 @@ class IsoBrowserTab(AbstractSettingsWidget):
         except Exception as e:
             error(error_mapping["saved_state_load_failed"].format(file_ext.upper(), e, format_exc()))
             self._reset_iso_state()
-            QMessageBox.critical(self, "Error", error_mapping["load_failed_dialog"].format(dialog_texts["error"], str(e)))
+            QMessageBox.critical(
+                self, "Error", error_mapping["load_failed_dialog"].format(dialog_texts["error"], str(e))
+            )
 
     @property
     def last_source_path(self) -> SPath:
@@ -363,13 +366,13 @@ dialog_text_map = {
     ".iso": {
         "opening": "Opening ISO file...",
         "loading": "Loading titles from ISO...",
-        "error": "Failed to load ISO file"
+        "error": "Failed to load ISO file",
     },
     ".ifo": {
         "opening": "Opening IFO file...",
         "loading": "Loading titles from DVD structure...",
-        "error": "Failed to load IFO file"
-    }
+        "error": "Failed to load IFO file",
+    },
 }
 
 
@@ -378,7 +381,7 @@ error_mapping: dict[str, str] = {
     "title_add_failed": "Failed to add title {}: {}\n{}",
     "load_failed": "{}: {}\n{}",
     "load_failed_dialog": "{}: {}",
-    "saved_state_load_failed": "Failed to load saved {} state: {}\n{}"
+    "saved_state_load_failed": "Failed to load saved {} state: {}\n{}",
 }
 
 
