@@ -5,7 +5,6 @@ from threading import Timer
 from typing import Any, Callable, Sequence, cast
 
 import numpy as np
-
 from jetpytools import R, T, complex_hash, mod2
 from numpy.typing import NDArray
 from PyQt6.QtCore import QObject, Qt, QThreadPool, pyqtSignal
@@ -14,23 +13,57 @@ from PyQt6.QtWidgets import QFrame, QLabel, QTabWidget, QWidget
 from scipy.fft import dct
 from scipy.signal import argrelextrema
 from vskernels import (
-    AdobeBicubic, Bicubic, BicubicSharp, Bilinear, Catrom, FFmpegBicubic, Hermite, Kernel, KernelLike, Lanczos, Mitchell
+    AdobeBicubic,
+    Bicubic,
+    BicubicSharp,
+    Bilinear,
+    Catrom,
+    FFmpegBicubic,
+    Hermite,
+    Kernel,
+    KernelLike,
+    Lanczos,
+    Mitchell,
 )
 from vspreview.core import (
-    ComboBox, CroppingInfo, DoubleSpinBox, ExtendedWidget, Frame, HBoxLayout, PlotMouseEvent,
-    PlottingCanvasDefaultFrame, ProgressBar, PushButton, SpinBox, Stretch, Switch, VBoxLayout
+    ComboBox,
+    CroppingInfo,
+    DoubleSpinBox,
+    ExtendedWidget,
+    Frame,
+    HBoxLayout,
+    PlotMouseEvent,
+    PlottingCanvasDefaultFrame,
+    ProgressBar,
+    PushButton,
+    SpinBox,
+    Stretch,
+    Switch,
+    VBoxLayout,
 )
 from vspreview.core.vsenv import Runner
 from vspreview.main import MainWindow
 from vspreview.models import GeneralModel
 from vspreview.plugins import AbstractPlugin, PluginConfig
 from vstools import (
-    ClipFramesCache, ClipsCache, DynamicClipsCache, FieldBased, Matrix, clip_data_gather, core, depth, get_h, get_w,
-    padder, plane, vs, vs_object
+    ClipFramesCache,
+    ClipsCache,
+    DynamicClipsCache,
+    FieldBased,
+    Matrix,
+    clip_data_gather,
+    core,
+    depth,
+    get_h,
+    get_w,
+    padder,
+    plane,
+    vs,
+    vs_object,
 )
 
 __all__ = [
-    'NativeResolutionPlugin'
+    "NativeResolutionPlugin"
 ]
 
 common_kernels = [
@@ -53,12 +86,12 @@ common_kernels = [
 def get_kernel_name(kernel: KernelLike) -> str:
     name = kernel.__class__.__name__
 
-    if name.lower().endswith('bicubic'):
-        name = name[:-len('bicubic')]
+    if name.lower().endswith("bicubic"):
+        name = name[:-len("bicubic")]
 
     if isinstance(kernel, Bicubic):
-        def _e(x: int | float) -> str:
-            return str(int(x)) if float(x).is_integer() else f'{x:.2f}'
+        def _e(x: float) -> str:
+            return str(int(x)) if float(x).is_integer() else f"{x:.2f}"
         name += f" (b={_e(kernel.b)}, c={_e(kernel.c)})"
     elif isinstance(kernel, Lanczos):
         name += f" (taps={kernel.taps})"
@@ -88,21 +121,21 @@ class FrequencyCanvas(PlottingCanvasDefaultFrame):
         inter_norm = self.plugin.get_inter(dct, dct_up, *self.plugin.check_range)
         inter_cross = self.plugin.get_inter(dct_cross, None, *self.plugin.check_range)
 
-        current_dimension = 'Width' if self.plugin.dimension_switch.isChecked() else 'Height'
-        opposite_dimension = 'Height' if self.plugin.dimension_switch.isChecked() else 'Width'
+        current_dimension = "Width" if self.plugin.dimension_switch.isChecked() else "Height"
+        opposite_dimension = "Height" if self.plugin.dimension_switch.isChecked() else "Width"
 
-        results_text = 'Spikes: '
+        results_text = "Spikes: "
         if len(inter_norm):
-            results_text += ', '.join(map(str, sorted(set(inter_norm))))
+            results_text += ", ".join(map(str, sorted(set(inter_norm))))
         else:
-            results_text += f'None found. ({len(inter_cross)} found on {opposite_dimension})'
+            results_text += f"None found. ({len(inter_cross)} found on {opposite_dimension})"
 
         self.plugin.results.setText(results_text)
 
         self.axes.plot(dct, label=current_dimension)
         self.axes.plot(dct_cross, label=opposite_dimension)
 
-        for inter, dct_base, color in [(inter_norm, dct, 'r'), (inter_cross, dct_cross, 'b')]:
+        for inter, dct_base, color in [(inter_norm, dct, "r"), (inter_cross, dct_cross, "b")]:
             if len(inter):
                 self.axes.scatter(
                     inter, dct_base[inter], linewidth=0.3, s=self.plugin.check_radius, c=color
@@ -143,18 +176,18 @@ class FrequencyAnalyzer(ExtendedWidget):
         self.canvas = FrequencyCanvas(self)
 
         self.dimension_switch = Switch(
-            12, 40, 1, ('Height', 'Width', 2), checked=False, clicked=self.on_dimension_to_check_change
+            12, 40, 1, ("Height", "Width", 2), checked=False, clicked=self.on_dimension_to_check_change
         )
 
         on_update_cb = self.on_update_values(False, False, True, True, True, True)
 
         self.min_max_label = QLabel()
 
-        self.height_min_spinbox = SpinBox(None, 0, None, 'px', valueChanged=on_update_cb)
-        self.height_max_spinbox = SpinBox(None, 0, None, 'px', valueChanged=on_update_cb)
+        self.height_min_spinbox = SpinBox(None, 0, None, "px", valueChanged=on_update_cb)
+        self.height_max_spinbox = SpinBox(None, 0, None, "px", valueChanged=on_update_cb)
 
-        self.width_min_spinbox = SpinBox(None, 0, None, 'px', valueChanged=on_update_cb)
-        self.width_max_spinbox = SpinBox(None, 0, None, 'px', valueChanged=on_update_cb)
+        self.width_min_spinbox = SpinBox(None, 0, None, "px", valueChanged=on_update_cb)
+        self.width_max_spinbox = SpinBox(None, 0, None, "px", valueChanged=on_update_cb)
 
         self.filter_rate_spinbox = SpinBox(None, 0, 20, value=0, valueChanged=self.filter_rate_on_change)
 
@@ -162,7 +195,7 @@ class FrequencyAnalyzer(ExtendedWidget):
         self.cull_rate_spinbox.setRange(0.0, 10.0)
         self.cull_rate_spinbox.setDecimals(1)
         self.cull_rate_spinbox.setSingleStep(0.1)
-        self.cull_rate_spinbox.setSuffix('x')
+        self.cull_rate_spinbox.setSuffix("x")
 
         self.check_radius_spinbox = SpinBox(None, 10, 100, value=50, valueChanged=on_update_cb)
 
@@ -182,9 +215,9 @@ class FrequencyAnalyzer(ExtendedWidget):
 
         controls_frame = QFrame()
         HBoxLayout(controls_frame, [
-            VBoxLayout([QLabel('Filter rate'), self.filter_rate_spinbox]),
-            VBoxLayout([QLabel('Cull rate'), self.cull_rate_spinbox]),
-            VBoxLayout([QLabel('Check radius'), self.check_radius_spinbox])
+            VBoxLayout([QLabel("Filter rate"), self.filter_rate_spinbox]),
+            VBoxLayout([QLabel("Cull rate"), self.cull_rate_spinbox]),
+            VBoxLayout([QLabel("Check radius"), self.check_radius_spinbox])
         ])
 
         self.on_dimension_to_check_change(False)
@@ -305,7 +338,7 @@ class FrequencyAnalyzer(ExtendedWidget):
             self.height_min_spinbox.hide()
             self.height_max_spinbox.hide()
 
-            self.min_max_label.setText('Min/Max width checked')
+            self.min_max_label.setText("Min/Max width checked")
         else:
             self.width_min_spinbox.hide()
             self.width_max_spinbox.hide()
@@ -313,7 +346,7 @@ class FrequencyAnalyzer(ExtendedWidget):
             self.height_min_spinbox.show()
             self.height_max_spinbox.show()
 
-            self.min_max_label.setText('Min/Max height checked')
+            self.min_max_label.setText("Min/Max height checked")
 
         self.canvas.render()
 
@@ -459,9 +492,9 @@ class RescaleErrorRunner(QObject):
         rescaled_clip = self.clip.std.BlankClip(length=len(self.attempts)).std.FrameEval(lambda n: rescaled_clips[n][self.frame])
 
         if self.metric_mode == 0:
-            metric_expr = 'x y - abs'
+            metric_expr = "x y - abs"
         elif self.metric_mode == 1:
-            metric_expr = 'x y - 2 pow'
+            metric_expr = "x y - 2 pow"
         else:
             raise RuntimeError
 
@@ -476,7 +509,7 @@ class RescaleErrorRunner(QObject):
             lambda n, f: cast(float, f.props.PlaneStatsAverage)
         )
 
-        attempt_idx = 0 if 'h' not in self.mode else 1
+        attempt_idx = 0 if "h" not in self.mode else 1
 
         self.data = ([x[attempt_idx] for x in self.attempts], errors)
 
@@ -494,7 +527,7 @@ class RescaleErrorCanvas(PlottingCanvasDefaultFrame):
         attempts = self.axes.lines[0].get_xdata()
         errors = self.axes.lines[0].get_ydata()
 
-        width_check = 'h' not in self.plugin.rescale_mode
+        width_check = "h" not in self.plugin.rescale_mode
 
         assert event.xdata is not None
 
@@ -519,18 +552,18 @@ class RescaleErrorCanvas(PlottingCanvasDefaultFrame):
 
         min_indices = argrelextrema(errors, np.less, order=order)[0]
 
-        self.axes.plot(attempts, errors, label='Error')
+        self.axes.plot(attempts, errors, label="Error")
 
         if len(min_indices):
-            self.axes.scatter(attempts[min_indices], errors[min_indices], linewidth=0.3, s=50, c='r')
+            self.axes.scatter(attempts[min_indices], errors[min_indices], linewidth=0.3, s=50, c="r")
 
         best_arr = [(attempts[i], errors[i]) for i in min_indices]
         best_arr.sort(key=lambda v: v[1])
         best_arr = best_arr[:5]
 
-        best_indices = ', '.join(map(str, (x[0] for x in best_arr))) or 'None'
+        best_indices = ", ".join(map(str, (x[0] for x in best_arr))) or "None"
 
-        self.plugin.results.setText(f'Spikes: {best_indices}')
+        self.plugin.results.setText(f"Spikes: {best_indices}")
 
 
 class DynamicDataCache(vs_object, dict[T, R]):
@@ -568,7 +601,7 @@ class RescaleErrorClipCache(DynamicDataCache[
                 return kernel.scale(kernel.descale(clip, *attempt, field_based=field_based), clip.width, clip.height)
         else:
             clip_ar = clip.width / clip.height
-            do_h, do_w = 'h' in mode, 'w' in mode
+            do_h, do_w = "h" in mode, "w" in mode
 
             def _gen_clip_from_attempt(attempt: tuple[Any, Any]) -> vs.VideoNode:
                 src_width, src_height = attempt
@@ -616,7 +649,7 @@ class RescaleErrorAnalyzer(ExtendedWidget):
         self.controls = QWidget()
 
         self.dimension_switch = Switch(
-            12, 40, 1, ('Height', 'Width', 2), checked=False, clicked=self.on_dimension_to_check_change
+            12, 40, 1, ("Height", "Width", 2), checked=False, clicked=self.on_dimension_to_check_change
         )
         self.kernels_combobox = ComboBox[str](
             model=GeneralModel[str](list(map(get_kernel_name, common_kernels)), False),
@@ -625,16 +658,16 @@ class RescaleErrorAnalyzer(ExtendedWidget):
 
         self.bs_parity_label = QLabel()
         self.bs_parity_switch = Switch(
-            12, 40, 1, ('Even', 'Odd', 2), checked=False
+            12, 40, 1, ("Even", "Odd", 2), checked=False
         )
 
         self.min_max_label = QLabel()
 
-        self.height_min_spinbox = SpinBox(None, 0, None, 'px')
-        self.height_max_spinbox = SpinBox(None, 0, None, 'px')
+        self.height_min_spinbox = SpinBox(None, 0, None, "px")
+        self.height_max_spinbox = SpinBox(None, 0, None, "px")
 
-        self.width_min_spinbox = SpinBox(None, 0, None, 'px')
-        self.width_max_spinbox = SpinBox(None, 0, None, 'px')
+        self.width_min_spinbox = SpinBox(None, 0, None, "px")
+        self.width_max_spinbox = SpinBox(None, 0, None, "px")
 
         self.step_spinbox = DoubleSpinBox(
             value=1.0, minimum=0.001, maximum=1.0, decimals=3,
@@ -642,15 +675,15 @@ class RescaleErrorAnalyzer(ExtendedWidget):
         )
 
         self.metric_type_combobox = ComboBox[str](
-            model=GeneralModel[str](['MAE', 'MSE'], False),
+            model=GeneralModel[str](["MAE", "MSE"], False),
             currentIndex=1, sizeAdjustPolicy=ComboBox.SizeAdjustPolicy.AdjustToContents
         )
 
-        self.update_button = PushButton('Update', clicked=lambda _: self.render_canvas())
+        self.update_button = PushButton("Update", clicked=lambda _: self.render_canvas())
 
         HBoxLayout(self.controls, [
             VBoxLayout([
-                QLabel('Dimension to check'),
+                QLabel("Dimension to check"),
                 self.dimension_switch,
             ]),
             VBoxLayout([
@@ -665,15 +698,15 @@ class RescaleErrorAnalyzer(ExtendedWidget):
                 ])
             ]),
             VBoxLayout([
-                QLabel('Step'),
+                QLabel("Step"),
                 self.step_spinbox
             ]),
             VBoxLayout([
-                QLabel('Kernel'),
+                QLabel("Kernel"),
                 self.kernels_combobox
             ]),
             VBoxLayout([
-                QLabel('Metric'),
+                QLabel("Metric"),
                 self.metric_type_combobox
             ]),
             Stretch(),
@@ -697,7 +730,7 @@ class RescaleErrorAnalyzer(ExtendedWidget):
 
         VBoxLayout(self.errors_loading, [
             Stretch(),
-            QLabel('Calculating errors...'),
+            QLabel("Calculating errors..."),
             self.errors_progress,
             Stretch()
         ])
@@ -710,7 +743,7 @@ class RescaleErrorAnalyzer(ExtendedWidget):
 
         VBoxLayout(self.rescale_loading, [
             Stretch(),
-            QLabel('Creating rescaled clip...'),
+            QLabel("Creating rescaled clip..."),
             self.rescale_progress,
             Stretch()
         ])
@@ -762,7 +795,7 @@ class RescaleErrorAnalyzer(ExtendedWidget):
         self.display.setVisible(display)
 
     def on_dimension_to_check_change(self) -> None:
-        if self.rescale_mode == 'w':
+        if self.rescale_mode == "w":
             if self.height_min_spinbox.isVisible():
                 self.width_min_spinbox.setValue(get_w(self.height_min_spinbox.value(), self.curr_clip))
                 self.width_max_spinbox.setValue(get_w(self.height_max_spinbox.value(), self.curr_clip))
@@ -773,8 +806,8 @@ class RescaleErrorAnalyzer(ExtendedWidget):
             self.height_min_spinbox.hide()
             self.height_max_spinbox.hide()
 
-            self.bs_parity_label.setText('Base width parity')
-            self.min_max_label.setText('Min/Max width checked')
+            self.bs_parity_label.setText("Base width parity")
+            self.min_max_label.setText("Min/Max width checked")
         else:
             if self.width_min_spinbox.isVisible():
                 self.height_min_spinbox.setValue(get_h(self.width_min_spinbox.value(), self.curr_clip))
@@ -786,8 +819,8 @@ class RescaleErrorAnalyzer(ExtendedWidget):
             self.height_min_spinbox.show()
             self.height_max_spinbox.show()
 
-            self.bs_parity_label.setText('Base height parity')
-            self.min_max_label.setText('Min/Max height checked')
+            self.bs_parity_label.setText("Base height parity")
+            self.min_max_label.setText("Min/Max height checked")
 
     @property
     def curr_clip(self) -> vs.VideoNode:
@@ -859,7 +892,7 @@ class RescaleErrorAnalyzer(ExtendedWidget):
             wclip = self.workclips[self.main.current_output.source.clip]
 
             attempts = [
-                ((x * wclip.width / wclip.height, x) if 'h' in rescale_mode else (x, x / wclip.width * wclip.height))
+                ((x * wclip.width / wclip.height, x) if "h" in rescale_mode else (x, x / wclip.width * wclip.height))
                 for x in [
                     round(cast(float, val), decimals)
                     for val in np.arange(start, stop + step, step) if round(val, decimals) <= stop
@@ -933,7 +966,7 @@ class RescaleErrorAnalyzer(ExtendedWidget):
 
     @property
     def rescale_mode(self) -> str:
-        return 'w' if self.dimension_switch.isChecked() else 'h'
+        return "w" if self.dimension_switch.isChecked() else "h"
 
     @property
     def step_decimals(self) -> int:
@@ -943,7 +976,7 @@ class RescaleErrorAnalyzer(ExtendedWidget):
         return max(str(step)[::-1].find("."), 0)
 
     def _get_values(self) -> tuple[str, int, int, float, float, float]:
-        if 'h' in self.rescale_mode:
+        if "h" in self.rescale_mode:
             start = self.height_min_spinbox.value()
             stop = self.height_max_spinbox.value()
         else:
@@ -951,7 +984,7 @@ class RescaleErrorAnalyzer(ExtendedWidget):
             stop = self.width_max_spinbox.value()
 
         step = round(
-            self.step_spinbox.value(), max(str(self.step_spinbox.minimum())[::-1].find('.'), 0)
+            self.step_spinbox.value(), max(str(self.step_spinbox.minimum())[::-1].find("."), 0)
         )
         step = min(max(step, self.step_spinbox.minimum()), self.step_spinbox.maximum())
 
@@ -980,7 +1013,7 @@ class RescaleErrorAnalyzer(ExtendedWidget):
 
         if key not in self.current_datas:
             self.current_datas[key] = [
-                {i: None for i in range(out.source.clip.num_frames)}
+                dict.fromkeys(range(out.source.clip.num_frames))
                 for out in self.main.outputs
             ]
 
@@ -1008,7 +1041,7 @@ class RescaleErrorAnalyzer(ExtendedWidget):
 
 
 class NativeResolutionPlugin(AbstractPlugin, QTabWidget):
-    _config = PluginConfig('dev.setsugen.native_resolution', 'Native Resolution')
+    _config = PluginConfig("dev.setsugen.native_resolution", "Native Resolution")
 
     def __init__(self, main: MainWindow) -> None:
         super().__init__(main)
@@ -1017,8 +1050,8 @@ class NativeResolutionPlugin(AbstractPlugin, QTabWidget):
         self.dft = FrequencyAnalyzer(main)
         # self.kernel = KernelAnalyzer(main)
 
-        self.addTab(self.rescale, 'Rescale Error Analyze')
-        self.addTab(self.dft, 'Frequency Analyze')
+        self.addTab(self.rescale, "Rescale Error Analyze")
+        self.addTab(self.dft, "Frequency Analyze")
         # self.addTab(self.kernel, 'Kernel Analyze')
 
         self.modes = (self.rescale, self.dft)  # , self.kernel)

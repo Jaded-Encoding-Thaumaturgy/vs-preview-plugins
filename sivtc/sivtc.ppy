@@ -7,12 +7,12 @@ from vspreview.plugins import MappedNodesPlugin, PluginConfig, PluginGraphicsVie
 from vstools import vs
 
 __all__ = [
-    'SIVTCPlugin'
+    "SIVTCPlugin"
 ]
 
 
 class SIVTCPlugin(MappedNodesPlugin, QWidget):
-    _config = PluginConfig('dev.setsugen.sivtc', 'SIVTC')
+    _config = PluginConfig("dev.setsugen.sivtc", "SIVTC")
 
     def setup_ui(self) -> None:
         self.cycle_spinbox = SpinBox(None, 0, 4, valueChanged=self.reset)
@@ -20,12 +20,12 @@ class SIVTCPlugin(MappedNodesPlugin, QWidget):
         self.view = PluginGraphicsView(self)
         self.view._autofit = True
 
-        self.tff_switch = Switch(state_texts=('TFF', 'BFF', 2), clicked=self.reset)
+        self.tff_switch = Switch(state_texts=("TFF", "BFF", 2), clicked=self.reset)
 
         VBoxLayout(self, [
             HBoxLayout([
                 self.tff_switch, self.get_separator(),
-                QLabel('Cycle:'), self.cycle_spinbox,
+                QLabel("Cycle:"), self.cycle_spinbox,
                 Stretch(2)
             ]),
             self.view

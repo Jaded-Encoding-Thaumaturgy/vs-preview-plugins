@@ -1,1 +1,21 @@
+target-version = "py312"
+
 extend-include = ["*.ppy"]
+line-length = 120
+indent-width = 4
+
+[format]
+docstring-code-format = true
+
+[lint]
+extend-select = [
+    "E",
+    "C4",
+    "I",
+    "PYI",
+    "Q",
+    "SIM",
+    "N",
+    "W",
+    "RUF"
+]

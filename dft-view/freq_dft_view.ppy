@@ -3,24 +3,20 @@ from __future__ import annotations
 from vspreview.plugins import MappedNodesViewPlugin, PluginConfig
 from vstools import DitherType, depth, initialize_input, split, stack_clips, vs
 
-__all__ = [
-    'DFTViewPlugin'
-]
+__all__ = ["DFTViewPlugin"]
 
 
 class DFTViewPlugin(MappedNodesViewPlugin):
     """A plugin that displays the Discrete Fourier Transform (DFT) of all planes of a video node."""
 
-    _config = PluginConfig('dev.setsugen.fft_view', 'DFT View')
-    _url = 'https://github.com/sgt0/vapoursynth-fftspectrum-rs'
+    _config = PluginConfig("dev.setsugen.fft_view", "DFT View")
+    _url = "https://github.com/sgt0/vapoursynth-fftspectrum-rs"
 
     @initialize_input(dither_type=DitherType.NONE)
     def get_node(self, node: vs.VideoNode) -> vs.VideoNode:
-
-        if not hasattr(vs.core, 'fftspectrum_rs'):
+        if not hasattr(vs.core, "fftspectrum_rs"):
             raise AttributeError(
-                'The required plugin "fftspectrum_rs" is not installed. '
-                f'Please install it from: {self._url}'
+                f'The required plugin "fftspectrum_rs" is not installed. Please install it from: {self._url}'
             )
 
         planes = split(depth(node, 32))
@@ -28,21 +24,14 @@ class DFTViewPlugin(MappedNodesViewPlugin):
         if len(planes) == 1:
             return planes[0].fftspectrum_rs.FFTSpectrum()
 
-        planes = [
-            c.fftspectrum_rs.FFTSpectrum().text.Text(text=k)
-            for k, c in zip(node.format.name, planes)
-            ]
+        planes = [c.fftspectrum_rs.FFTSpectrum().text.Text(text=k) for k, c in zip(node.format.name, planes)]
 
         subsampling = node.format.subsampling_w, node.format.subsampling_h
 
         org: list[vs.VideoNode | list[vs.VideoNode | list[vs.VideoNode]]] = planes
 
         if subsampling in ((2, 2), (2, 0)):
-            middle = [
-                planes[1].std.BlankClip(),
-                *planes[1:],
-                planes[1].std.BlankClip()
-            ]
+            middle = [planes[1].std.BlankClip(), *planes[1:], planes[1].std.BlankClip()]
 
             org = [planes[0], middle]
         elif subsampling != (0, 0):

@@ -1,11 +1,12 @@
+from typing import Any
 from PyQt6.QtWidgets import QHBoxLayout, QWidget
 
 __all__ = [
-    'setup_layout',
+    "setup_layout",
 ]
 
 
-def setup_layout(parent: QWidget) -> None:
+def setup_layout(parent: Any) -> None:
     """Set up widget layout."""
 
     file_widget = QWidget()
