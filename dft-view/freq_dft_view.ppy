@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from vspreview.plugins import MappedNodesViewPlugin, PluginConfig
-from vstools import DitherType, depth, initialize_input, split, stack_clips, vs
+from vstools import DitherType, initialize_input, split, stack_clips, vs
 
 __all__ = ["DFTViewPlugin"]
 
@@ -12,14 +12,14 @@ class DFTViewPlugin(MappedNodesViewPlugin):
     _config = PluginConfig("dev.setsugen.fft_view", "DFT View")
     _url = "https://github.com/sgt0/vapoursynth-fftspectrum-rs"
 
-    @initialize_input(dither_type=DitherType.NONE)
+    @initialize_input(bits=32, dither_type=DitherType.NONE)
     def get_node(self, node: vs.VideoNode) -> vs.VideoNode:
         if not hasattr(vs.core, "fftspectrum_rs"):
             raise AttributeError(
                 f'The required plugin "fftspectrum_rs" is not installed. Please install it from: {self._url}'
             )
 
-        planes = split(depth(node, 32))
+        planes = split(node)
 
         if len(planes) == 1:
             return planes[0].fftspectrum_rs.FFTSpectrum()
