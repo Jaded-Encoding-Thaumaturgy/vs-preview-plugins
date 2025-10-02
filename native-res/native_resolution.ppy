@@ -13,13 +13,10 @@ from PyQt6.QtWidgets import QFrame, QLabel, QTabWidget, QWidget
 from scipy.fft import dct
 from scipy.signal import argrelextrema
 from vskernels import (
-    AdobeBicubic,
     Bicubic,
     BicubicSharp,
     Bilinear,
     Catrom,
-    FFmpegBicubic,
-    Hermite,
     Kernel,
     KernelLike,
     Lanczos,
@@ -62,22 +59,21 @@ from vstools import (
     vs_object,
 )
 
+from .kernel import KernelAnalyzer
+
 __all__ = ["NativeResolutionPlugin"]
 
-common_kernels = [
-    # Bicubic
+common_kernels: list[KernelLike] = [
+    # Bicubic-based
     Catrom(),
     Mitchell(),
-    Hermite(),
     BicubicSharp(),
-    FFmpegBicubic(),
-    AdobeBicubic(),
-    # Lanczos
-    Lanczos(2),
-    Lanczos(3),
-    Lanczos(4),
-    # Other
+    # Bilinear-based
     Bilinear(),
+    # Lanczos-based
+    Lanczos(taps=2),
+    Lanczos(taps=3),
+    Lanczos(taps=4),
 ]
 
 
@@ -570,7 +566,8 @@ class RescaleErrorCanvas(PlottingCanvasDefaultFrame):
     def _render(self, frame: Frame) -> None:
         self.plugin.set_visibility(False, False, True)
 
-        assert (data := self.plugin.current_data[self.plugin.main.current_output.index][int(frame)])
+        data = self.plugin.current_data[self.plugin.main.current_output.index][int(frame)]
+        assert data
 
         attempts, errors = map(np.array, data)
 
@@ -583,7 +580,7 @@ class RescaleErrorCanvas(PlottingCanvasDefaultFrame):
         if len(min_indices):
             self.axes.scatter(attempts[min_indices], errors[min_indices], linewidth=0.3, s=50, c="r")
 
-        best_arr = [(attempts[i], errors[i]) for i in min_indices]
+        best_arr = [(float(attempts[i]), float(errors[i])) for i in min_indices]
         best_arr.sort(key=lambda v: v[1])
         best_arr = best_arr[:5]
 
@@ -620,9 +617,9 @@ class RescaleErrorClipCache(
     ]
 ):
     def get_data(
-        self, args: tuple[vs.VideoNode, Sequence[tuple[float, float]], Kernel, bool, str, int, FieldBased]
+        self, key: tuple[vs.VideoNode, Sequence[tuple[float, float]], Kernel, bool, str, int, FieldBased]
     ) -> list[vs.VideoNode]:
-        clip, attempts, kernel, is_integer, mode, bs_parity, field_based = args
+        clip, attempts, kernel, is_integer, mode, bs_parity, field_based = key
 
         if is_integer:
 
@@ -1066,13 +1063,13 @@ class NativeResolutionPlugin(AbstractPlugin, QTabWidget):
 
         self.rescale = RescaleErrorAnalyzer(main)
         self.dft = FrequencyAnalyzer(main)
-        # self.kernel = KernelAnalyzer(main)
+        self.kernel = KernelAnalyzer(main)
 
         self.addTab(self.rescale, "Rescale Error Analyze")
         self.addTab(self.dft, "Frequency Analyze")
-        # self.addTab(self.kernel, 'Kernel Analyze')
+        self.addTab(self.kernel, "Kernel Analyze")
 
-        self.modes = (self.rescale, self.dft)  # , self.kernel)
+        self.modes = (self.rescale, self.dft, self.kernel)
         self.cache = [(-1, -1)] * len(self.modes)
 
         self.currentChanged.connect(self.on_tab_change)
@@ -1084,15 +1081,24 @@ class NativeResolutionPlugin(AbstractPlugin, QTabWidget):
     def add_shortcuts(self) -> None:
         def reset_zoom() -> None:
             if self.underMouse():
-                self.modes[self.currentIndex()].canvas.render(None, False)
+                current_mode = self.modes[self.currentIndex()]
+                if hasattr(current_mode, "canvas"):
+                    current_mode.canvas.render(None, False)
+                elif hasattr(current_mode, "render_canvas"):
+                    current_mode.render_canvas()
 
         def render_canvas_on_rescale_error() -> None:
             if self.underMouse() and self.currentIndex() == 0:
                 self.rescale.render_canvas()
 
+        def render_canvas_on_kernel() -> None:
+            if self.underMouse() and self.currentIndex() == 2:
+                self.kernel.render_canvas()
+
         self.add_shortcut("Reset zoom", self, reset_zoom, QKeySequence(Qt.Key.Key_Escape))
         self.add_shortcut("Render canvas", self, render_canvas_on_rescale_error, QKeySequence(Qt.Key.Key_Enter))
         self.add_shortcut("Render canvas", self, render_canvas_on_rescale_error, QKeySequence(Qt.Key.Key_Return))
+        self.add_shortcut("Render kernel analyze", self, render_canvas_on_kernel, QKeySequence(Qt.Key.Key_G))
 
     def init_outputs(self) -> None:
         assert self.main.outputs
