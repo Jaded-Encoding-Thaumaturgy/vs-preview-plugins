@@ -709,6 +709,8 @@ class KernelAnalyzer(ExtendedWidget):
         self._setup_control_size_policy(self.edgemask_switch)
 
         self.thr_spinbox = self._create_spinbox(0.015, 0, 1, 4, 0.005)
+        self.thr_spinbox.setValue(0.003)
+
         self.crop_spinbox = self._create_spinbox(10, 0, 9999, 0, 1)
         self.global_blur_steps_min_spinbox = self._create_spinbox(1.0, 0.1, 5.0, 3, 0.1)
         self.global_blur_steps_max_spinbox = self._create_spinbox(1.0, 0.1, 5.0, 3, 0.1)
