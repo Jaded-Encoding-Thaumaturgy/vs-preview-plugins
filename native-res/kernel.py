@@ -324,15 +324,17 @@ class KernelRunner(QObject):
         descaled = kernel.descale(wclip, target_w, target_h, **desc_kwargs)
         upscaled = kernel.scale(descaled, wclip.width, wclip.height, **desc_kwargs)
 
-        if self.analyzer.edgemask_switch.isChecked():
+        if (
+            self.analyzer.border_handling_combobox.currentIndex() != BorderHandling.ZERO.value
+            and self.analyzer.edgemask_switch.isChecked()
+        ):
             edgemask = Sobel.edgemask(wclip)
 
             if kernel.kwargs.get("border_handling") is BorderHandling.ZERO:
                 crops = (kernel.kernel_radius,) * 4
                 edgemask = edgemask.std.Crop(*crops).std.AddBorders(*crops, color=1)
 
-            wclip = wclip.std.MaskedMerge(wclip, edgemask)
-            upscaled = upscaled.std.MaskedMerge(upscaled, edgemask)
+            upscaled = wclip.std.MaskedMerge(upscaled, edgemask)
 
         # Apply cropping if specified
         if (crop_value := self.analyzer.get_crop_value()) > 0:
@@ -344,13 +346,17 @@ class KernelRunner(QObject):
                 wclip = wclip.std.Crop(crop_value, crop_value, crop_value, crop_value)
                 upscaled = upscaled.std.Crop(crop_value, crop_value, crop_value, crop_value)
 
-        mae_clip = norm_expr([wclip, upscaled], f"x y - abs dup {self.analyzer.thr_spinbox.value()} > swap 0 ?")
-        mae_clip = mae_clip.std.PlaneStats(prop="mae")
+        if self.analyzer.thr_spinbox.value() > 0:
+            mae_clip = norm_expr([wclip, upscaled], f"x y - abs dup {self.analyzer.thr_spinbox.value()} > swap 0 ?")
+        else:
+            mae_clip = norm_expr([wclip, upscaled], "x y - abs")
 
         mse_clip = norm_expr([wclip, upscaled], "x y - 2 pow")
-        mse_clip = mse_clip.std.PlaneStats(prop="mse")
 
-        err_clip = merge_clip_props(mae_clip, mse_clip)
+        err_clip = merge_clip_props(
+            mae_clip.std.PlaneStats(prop="mae"),
+            mse_clip.std.PlaneStats(prop="mse"),
+        )
 
         errors = clip_data_gather(
             err_clip,
@@ -589,6 +595,7 @@ class KernelAnalyzer(ExtendedWidget):
             sizeAdjustPolicy=ComboBox.SizeAdjustPolicy.AdjustToContents,
         )
         self._setup_combobox_height(self.border_handling_combobox)
+        self.border_handling_combobox.currentIndexChanged.connect(self.on_border_handling_changed)
 
         self.sample_grid_model_switch = Switch(12, 48, 1, ("Edges", "Centers", 2), checked=False)
         self._setup_control_size_policy(self.sample_grid_model_switch)
@@ -645,6 +652,7 @@ class KernelAnalyzer(ExtendedWidget):
         self.on_dimension_to_check_change()
         self.set_field_based_default()
         self.set_gamma_correction_default()
+        self.update_crop_spinbox_state()
 
         self.errors_loading = QWidget()
         self.errors_progress = ProgressBar(self, value=0)
@@ -755,6 +763,13 @@ class KernelAnalyzer(ExtendedWidget):
             DEFAULT_STEP_VALUES["bicubic"],
         )
 
+        self.enable_b_switch = Switch(12, 48, 1, ("Disabled", "Enabled", 2))
+        self.enable_c_switch = Switch(12, 48, 1, ("Disabled", "Enabled", 2))
+        self.enable_c_switch.setChecked(True)
+
+        self._setup_control_size_policy(self.enable_b_switch)
+        self._setup_control_size_policy(self.enable_c_switch)
+
         self.taps_min_spinbox = self._create_spinbox(5.0, 0.0, 100.0, 3)
         self.taps_max_spinbox = self._create_spinbox(12.0, 0.0, 100.0, 3)
         self.taps_step_spinbox = self._create_spinbox(
@@ -767,6 +782,8 @@ class KernelAnalyzer(ExtendedWidget):
             DEFAULT_STEP_VALUES["sigma"], 0.01, 10.0, 3, DEFAULT_STEP_VALUES["sigma"]
         )
 
+        self.enable_b_label = QLabel("Enable b")
+        self.enable_c_label = QLabel("Enable c")
         self.bicubic_minmax_label = QLabel("b/c min/max")
         self.bicubic_step_label = QLabel("b/c step")
         self.taps_minmax_label = QLabel("Taps min/max")
@@ -776,6 +793,16 @@ class KernelAnalyzer(ExtendedWidget):
 
         main_layout = VBoxLayout(self.windowed_parameter_controls)
         hbox_layout = HBoxLayout()
+        hbox_layout.addWidget(
+            self._create_group_widget(self.enable_b_label, [self.enable_b_switch]),
+            1,
+        )
+
+        hbox_layout.addWidget(
+            self._create_group_widget(self.enable_c_label, [self.enable_c_switch]),
+            1,
+        )
+
         hbox_layout.addWidget(
             self._create_group_widget(
                 self.bicubic_minmax_label,
@@ -879,6 +906,10 @@ class KernelAnalyzer(ExtendedWidget):
         self.bicubic_max_spinbox.setVisible(bicubic_enabled)
         self.bicubic_step_label.setVisible(bicubic_enabled)
         self.bicubic_step_spinbox.setVisible(bicubic_enabled)
+        self.enable_b_label.setVisible(bicubic_enabled)
+        self.enable_b_switch.setVisible(bicubic_enabled)
+        self.enable_c_label.setVisible(bicubic_enabled)
+        self.enable_c_switch.setVisible(bicubic_enabled)
 
         taps_enabled = self.lanczos_switch.isChecked() or self.spline_switch.isChecked()
         self.taps_minmax_label.setVisible(taps_enabled)
@@ -950,6 +981,14 @@ class KernelAnalyzer(ExtendedWidget):
 
         if self.uncommon_kernels_switch.isChecked():
             self.update_windowed_parameter_visibility()
+
+    def on_border_handling_changed(self) -> None:
+        self.update_crop_spinbox_state()
+
+    def update_crop_spinbox_state(self) -> None:
+        is_zero_mode = self.border_handling_combobox.currentIndex() == BorderHandling.ZERO.value
+
+        self.crop_spinbox.setEnabled(not is_zero_mode)
 
     def on_dimension_change(self) -> None:
         if self.dimension_switch.isChecked():
@@ -1200,6 +1239,8 @@ class KernelAnalyzer(ExtendedWidget):
             "bicubic_min": self.bicubic_min_spinbox.value(),
             "bicubic_max": self.bicubic_max_spinbox.value(),
             "bicubic_step": self.bicubic_step_spinbox.value(),
+            "enable_b": float(self.enable_b_switch.isChecked()),
+            "enable_c": float(self.enable_c_switch.isChecked()),
             "taps_min": self.taps_min_spinbox.value(),
             "taps_max": self.taps_max_spinbox.value(),
             "taps_step": self.taps_step_spinbox.value(),
@@ -1235,9 +1276,17 @@ class KernelAnalyzer(ExtendedWidget):
             "shift_step": self.global_shift_step_spinbox,
         }
 
+        switch_mapping = {
+            "enable_b": self.enable_b_switch,
+            "enable_c": self.enable_c_switch,
+        }
+
         for key, value in options.items():
             if key in spinbox_mapping:
                 spinbox_mapping[key].setValue(value)
+
+            elif key in switch_mapping:
+                switch_mapping[key].setChecked(bool(value))
 
     def validate_windowed_options(self) -> bool:
         if self.bicubic_min_spinbox.value() >= self.bicubic_max_spinbox.value():
@@ -1419,13 +1468,13 @@ def _generate_bicubic_kernels(
     blur_range = KernelParameterGenerator.get_steps_range(windowed_options)
     blur_values = blur_range.generate_values()
 
-    variants = [
-        (round(b, 3), round(c, 3))
-        for b in bc_values
-        if bc_range.min_val <= b <= bc_range.max_val
-        for c in bc_values
-        if bc_range.min_val <= c <= bc_range.max_val
-    ]
+    enable_b = windowed_options.get("enable_b", 1.0) > 0.5
+    enable_c = windowed_options.get("enable_c", 1.0) > 0.5
+
+    b_values = [round(b, 3) for b in bc_values if bc_range.min_val <= b <= bc_range.max_val] if enable_b else [0.0]
+    c_values = [round(c, 3) for c in bc_values if bc_range.min_val <= c <= bc_range.max_val] if enable_c else [0.5]
+
+    variants = [(b, c) for b in b_values for c in c_values]
 
     for b, c in variants:
         from vskernels import Bicubic
