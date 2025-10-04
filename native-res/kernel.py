@@ -4,9 +4,18 @@ import logging
 from math import ceil
 from typing import Callable, Sequence, cast
 
+from vsmasktools import Sobel
 from vstools import merge_clip_props
 from PyQt6.QtCore import QObject, Qt, QThreadPool, pyqtSignal
-from PyQt6.QtWidgets import QHeaderView, QLabel, QSizePolicy, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import (
+    QHeaderView,
+    QLabel,
+    QSizePolicy,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
 from vsexprtools import norm_expr
 from vskernels import (
     BicubicSharp,
@@ -36,6 +45,7 @@ from vspreview.main import MainWindow
 from vspreview.models import GeneralModel
 from vsscale import ScalingArgs
 from vstools import (
+    depth,
     DynamicClipsCache,
     FieldBased,
     Matrix,
@@ -309,30 +319,46 @@ class KernelRunner(QObject):
             f"Descaling using the following parameters: {', '.join(f'{k}: {v}' for k, v in desc_kwargs.items())}",
         )
 
+        logging.debug(f"{target_h=}, {target_w=}, {ceil_bh=}, {ceil_bw=}")
+
         descaled = kernel.descale(wclip, target_w, target_h, **desc_kwargs)
         upscaled = kernel.scale(descaled, wclip.width, wclip.height, **desc_kwargs)
 
+        if self.analyzer.edgemask_switch.isChecked():
+            edgemask = Sobel.edgemask(wclip)
+
+            if kernel.kwargs.get("border_handling") is BorderHandling.ZERO:
+                crops = (kernel.kernel_radius,) * 4
+                edgemask = edgemask.std.Crop(*crops).std.AddBorders(*crops, color=1)
+
+            wclip = wclip.std.MaskedMerge(wclip, edgemask)
+            upscaled = upscaled.std.MaskedMerge(upscaled, edgemask)
+
+        # Apply cropping if specified
         if (crop_value := self.analyzer.get_crop_value()) > 0:
             max_crop_w = max(0, wclip.width // 2 - 1)
             max_crop_h = max(0, wclip.height // 2 - 1)
-
             crop_value = min(crop_value, max_crop_w, max_crop_h)
 
             if crop_value > 0:
                 wclip = wclip.std.Crop(crop_value, crop_value, crop_value, crop_value)
                 upscaled = upscaled.std.Crop(crop_value, crop_value, crop_value, crop_value)
 
-        mae_clip = norm_expr([wclip, upscaled], "x y - abs")
+        mae_clip = norm_expr([wclip, upscaled], f"x y - abs dup {self.analyzer.thr_spinbox.value()} > swap 0 ?")
         mae_clip = mae_clip.std.PlaneStats(prop="mae")
 
         mse_clip = norm_expr([wclip, upscaled], "x y - 2 pow")
         mse_clip = mse_clip.std.PlaneStats(prop="mse")
 
         err_clip = merge_clip_props(mae_clip, mse_clip)
+
         errors = clip_data_gather(
             err_clip,
             lambda i, n: None,
-            lambda n, f: (cast(float, f.props.maeAverage), cast(float, f.props.mseAverage)),
+            lambda n, f: (
+                cast(float, f.props.maeAverage),
+                cast(float, f.props.mseAverage),
+            ),
         )
 
         if errors:
@@ -355,8 +381,8 @@ class KernelRunner(QObject):
     ) -> None:
         current_kernel_index = self._calculate_kernel_index(kernel_index, shift_index)
 
-        if total_kernels >= 15:
-            logging.info(f"[{current_kernel_index + 1}/{total_kernels}] Analyzing kernel {kernel.__class__.__name__} ")
+        if total_kernels > 15:
+            logging.info(f"[{current_kernel_index + 1}/{total_kernels}] Analyzing kernel {kernel.__class__.__name__}")
 
         mae, mse = self._analyze_kernel(wclip, target_w, target_h, kernel, shift_top, shift_left)
         results.append(
@@ -396,7 +422,7 @@ class KernelRunner(QObject):
         if self.gamma_correction is Transfer.LINEAR:
             wclip = self.gamma_correction.apply(wclip)
 
-        wclip = get_y(wclip)[self.frame]
+        wclip = depth(get_y(wclip), 32)[self.frame]
 
         results = []
         total_kernels = self._calculate_total_kernels()
@@ -536,14 +562,19 @@ class KernelAnalyzer(ExtendedWidget):
         self.controls = QWidget()
 
         self.dimension_switch = Switch(
-            12, 40, 1, ("Height", "Width", 2), checked=False, clicked=self.on_dimension_change
+            12,
+            40,
+            1,
+            ("Height", "Width", 2),
+            checked=False,
+            clicked=self.on_dimension_change,
         )
 
         self.width_label = QLabel("Width")
-        self.width_spinbox = self._create_spinbox(1920.0, 1.0, 9999.0, 3, 1.0)
+        self.width_spinbox = self._create_spinbox(1920.0, 1.0, 0, 3, 1.0)
 
         self.height_label = QLabel("Height")
-        self.height_spinbox = self._create_spinbox(1080.0, 1.0, 9999.0, 3, 1.0)
+        self.height_spinbox = self._create_spinbox(1080.0, 1.0, 0, 3, 1.0)
 
         self.src_top_spinbox = self._create_spinbox(0.0, -100.0, 100.0, 6, 0.000025)
         self.src_left_spinbox = self._create_spinbox(0.0, -100.0, 100.0, 6, 0.000025)
@@ -621,7 +652,12 @@ class KernelAnalyzer(ExtendedWidget):
 
         VBoxLayout(
             self.errors_loading,
-            [Stretch(), QLabel("Analyzing kernels..."), self.errors_progress, Stretch()],
+            [
+                Stretch(),
+                QLabel("Analyzing kernels..."),
+                self.errors_progress,
+                Stretch(),
+            ],
         )
 
         self.display = QWidget()
@@ -648,7 +684,12 @@ class KernelAnalyzer(ExtendedWidget):
         self.gaussian_switch = Switch(12, 48, 1, ("Disabled", "Enabled", 2), checked=True)
         self.spline_switch = Switch(12, 48, 1, ("Disabled", "Enabled", 2), checked=True)
 
-        for switch in [self.bicubic_switch, self.lanczos_switch, self.gaussian_switch, self.spline_switch]:
+        for switch in [
+            self.bicubic_switch,
+            self.lanczos_switch,
+            self.gaussian_switch,
+            self.spline_switch,
+        ]:
             self._setup_control_size_policy(switch)
 
         self.bicubic_switch.clicked.connect(self.update_windowed_parameter_visibility)
@@ -656,8 +697,11 @@ class KernelAnalyzer(ExtendedWidget):
         self.gaussian_switch.clicked.connect(self.update_windowed_parameter_visibility)
         self.spline_switch.clicked.connect(self.update_windowed_parameter_visibility)
 
-        self.crops_spinbox = self._create_spinbox(0.0, 0.0, 9999, 0, 1.0)
-        self.crop_spinbox = self._create_spinbox(0, 0, 9999, 0, 1)
+        self.edgemask_switch = Switch(12, 48, 1, ("Disabled", "Enabled", 2), checked=False)
+        self._setup_control_size_policy(self.edgemask_switch)
+
+        self.thr_spinbox = self._create_spinbox(0.015, 0, 1, 4, 0.005)
+        self.crop_spinbox = self._create_spinbox(10, 0, 9999, 0, 1)
         self.global_blur_steps_min_spinbox = self._create_spinbox(1.0, 0.1, 5.0, 3, 0.1)
         self.global_blur_steps_max_spinbox = self._create_spinbox(1.0, 0.1, 5.0, 3, 0.1)
         self.global_blur_steps_step_spinbox = self._create_spinbox(
@@ -678,12 +722,21 @@ class KernelAnalyzer(ExtendedWidget):
                 self._create_labeled_control("Search Spline", self.spline_switch),
                 Stretch(),
                 self._create_labeled_control("Crop", self.crop_spinbox),
+                self._create_labeled_control("Threshold", self.thr_spinbox),
+                self._create_labeled_control("Sobel edgemask", self.edgemask_switch),
                 self._create_labeled_control(
-                    "Shift min/max", HBoxLayout([self.global_shift_min_spinbox, self.global_shift_max_spinbox])
+                    "Shift min/max",
+                    HBoxLayout([self.global_shift_min_spinbox, self.global_shift_max_spinbox]),
                 ),
                 self._create_labeled_control("Shift steps", self.global_shift_step_spinbox),
                 self._create_labeled_control(
-                    "Blur min/max", HBoxLayout([self.global_blur_steps_min_spinbox, self.global_blur_steps_max_spinbox])
+                    "Blur min/max",
+                    HBoxLayout(
+                        [
+                            self.global_blur_steps_min_spinbox,
+                            self.global_blur_steps_max_spinbox,
+                        ]
+                    ),
                 ),
                 self._create_labeled_control("Blur steps", self.global_blur_steps_step_spinbox),
             ],
@@ -695,7 +748,11 @@ class KernelAnalyzer(ExtendedWidget):
         self.bicubic_min_spinbox = self._create_spinbox(0.0, -100.0, 100.0, 3)
         self.bicubic_max_spinbox = self._create_spinbox(1.0, -100.0, 100.0, 3)
         self.bicubic_step_spinbox = self._create_spinbox(
-            DEFAULT_STEP_VALUES["bicubic"], 0.01, 10.0, 3, DEFAULT_STEP_VALUES["bicubic"]
+            DEFAULT_STEP_VALUES["bicubic"],
+            0.01,
+            10.0,
+            3,
+            DEFAULT_STEP_VALUES["bicubic"],
         )
 
         self.taps_min_spinbox = self._create_spinbox(5.0, 0.0, 100.0, 3)
@@ -733,7 +790,8 @@ class KernelAnalyzer(ExtendedWidget):
         )
 
         hbox_layout.addWidget(
-            self._create_group_widget(self.taps_minmax_label, [self.taps_min_spinbox, self.taps_max_spinbox]), 1
+            self._create_group_widget(self.taps_minmax_label, [self.taps_min_spinbox, self.taps_max_spinbox]),
+            1,
         )
 
         hbox_layout.addWidget(self._create_group_widget(self.taps_step_label, [self.taps_step_spinbox]), 1)
@@ -746,7 +804,10 @@ class KernelAnalyzer(ExtendedWidget):
             1,
         )
 
-        hbox_layout.addWidget(self._create_group_widget(self.sigma_step_label, [self.sigma_step_spinbox]), 1)
+        hbox_layout.addWidget(
+            self._create_group_widget(self.sigma_step_label, [self.sigma_step_spinbox]),
+            1,
+        )
 
         main_layout.addLayout(hbox_layout)
 
@@ -906,14 +967,18 @@ class KernelAnalyzer(ExtendedWidget):
 
     def on_dimension_to_check_change(self) -> None:
         if self.dimension_switch.isChecked():
-            default_width = self.curr_clip.width // 1.5
             self.width_spinbox.setMaximum(self.curr_clip.width)
-            self.width_spinbox.setValue(float(default_width))
+
+            if self.width_spinbox.value() >= self.curr_clip.width or self.width_spinbox.value() == 1.0:
+                self.width_spinbox.setValue(self.curr_clip.width // 1.5)
+
             self.bs_parity_label.setText("Base width parity")
         else:
-            default_height = self.curr_clip.height // 1.5
             self.height_spinbox.setMaximum(self.curr_clip.height)
-            self.height_spinbox.setValue(float(default_height))
+
+            if self.height_spinbox.value() >= self.curr_clip.height or self.height_spinbox.value() == 1.0:
+                self.height_spinbox.setValue(self.curr_clip.height // 1.5)
+
             self.bs_parity_label.setText("Base height parity")
 
     def set_field_based_default(self) -> None:
@@ -964,7 +1029,11 @@ class KernelAnalyzer(ExtendedWidget):
             enabled_kernels = self.get_enabled_kernel_types()
 
             analysis_kernels = get_analysis_kernels(
-                windowed_options, enabled_kernels, sample_grid_model, linear, border_handling
+                windowed_options,
+                enabled_kernels,
+                sample_grid_model,
+                linear,
+                border_handling,
             )
 
             kernels.extend(analysis_kernels)
@@ -1197,7 +1266,9 @@ def _safe_kernel_creation(kernel_class: type, **kwargs) -> KernelLike | None:
 
 
 def _create_blur_variations(
-    kernel: KernelLike, blur_values: list[float], add_kernel_instance: Callable[[KernelLike], None]
+    kernel: KernelLike,
+    blur_values: list[float],
+    add_kernel_instance: Callable[[KernelLike], None],
 ) -> None:
     for blur in blur_values:
         if blur != 1.0:
@@ -1206,7 +1277,13 @@ def _create_blur_variations(
                 kernel_params = {}
 
                 for k, v in kernel.__dict__.items():
-                    if not k.startswith("_") and k not in ("b", "c", "taps", "sigma", "kwargs"):
+                    if not k.startswith("_") and k not in (
+                        "b",
+                        "c",
+                        "taps",
+                        "sigma",
+                        "kwargs",
+                    ):
                         kernel_params[k] = v
 
                 new_kernel = kernel_class(**kernel_params)
