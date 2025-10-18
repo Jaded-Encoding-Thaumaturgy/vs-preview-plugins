@@ -2,10 +2,8 @@ from __future__ import annotations
 
 import logging
 from math import ceil
-from typing import Callable, Sequence, cast
+from typing import Any, Callable, Sequence, cast
 
-from vsmasktools import Sobel
-from vstools import merge_clip_props
 from PyQt6.QtCore import QObject, Qt, QThreadPool, pyqtSignal
 from PyQt6.QtWidgets import (
     QHeaderView,
@@ -28,6 +26,7 @@ from vskernels import (
     Mitchell,
     SampleGridModel,
 )
+from vsmasktools import Sobel
 from vspreview.core import (
     ComboBox,
     DoubleSpinBox,
@@ -45,20 +44,19 @@ from vspreview.main import MainWindow
 from vspreview.models import GeneralModel
 from vsscale import ScalingArgs
 from vstools import (
-    depth,
     DynamicClipsCache,
     FieldBased,
     Matrix,
-    R,
-    T,
     Transfer,
+    VSObject,
     clip_data_gather,
     complex_hash,
     core,
+    depth,
     get_y,
+    merge_clip_props,
     mod2,
     vs,
-    vs_object,
 )
 
 __all__ = ["KernelAnalyzer"]
@@ -231,7 +229,7 @@ def _create_common_kernels(
     ]
 
 
-class KernelWorkClip(DynamicClipsCache[vs.VideoNode, vs.VideoNode]):
+class KernelWorkClip(DynamicClipsCache[vs.VideoNode]):
     def get_clip(self, key: vs.VideoNode) -> vs.VideoNode:
         return core.resize.Bilinear(key, format=vs.GRAYS, matrix=Matrix.BT709, matrix_in=Matrix.from_video(key))
 
@@ -524,7 +522,7 @@ class KernelResultsDisplay(QWidget):
         self.kernels_table.resizeColumnsToContents()
 
 
-class DynamicDataCache(vs_object, dict[T, R]):
+class DynamicDataCache[T, R](dict[T, R], VSObject):
     def __init__(self, cache_size: int = 2) -> None:
         self.cache_size = cache_size
 
