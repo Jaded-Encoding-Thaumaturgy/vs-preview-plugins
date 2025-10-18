@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from logging import getLogger
+from typing import Sequence
+
 from vspreview.plugins import MappedNodesViewPlugin, PluginConfig
 from vstools import DitherType, depth, initialize_input, split, stack_clips, vs
 
@@ -11,33 +14,35 @@ class DFTViewPlugin(MappedNodesViewPlugin):
 
     _config = PluginConfig("dev.setsugen.fft_view", "DFT View")
     _url = "https://github.com/sgt0/vapoursynth-fftspectrum-rs"
+    _autofit = True
 
-    @initialize_input(dither_type=DitherType.NONE)
+    @initialize_input(bits=32, dither_type=DitherType.NONE)
     def get_node(self, node: vs.VideoNode) -> vs.VideoNode:
         if not hasattr(vs.core, "fftspectrum_rs"):
-            raise AttributeError(
+            getLogger().error(
                 f'The required plugin "fftspectrum_rs" is not installed. Please install it from: {self._url}'
             )
+            return node.std.BlankClip().text.Text(
+                f'The required plugin "fftspectrum_rs" is not installed. Please install it from: {self._url}', 5, 4
+            )
 
-        planes = split(depth(node, 32))
+        assert node.format
+        planes = split(node)
 
         if len(planes) == 1:
             return planes[0].fftspectrum_rs.FFTSpectrum()
 
-        planes = [c.fftspectrum_rs.FFTSpectrum().text.Text(text=k) for k, c in zip(node.format.name, planes)]
+        planes = [p.fftspectrum_rs.FFTSpectrum().text.Text(text=k) for k, p in zip(node.format.name, planes)]
 
-        subsampling = node.format.subsampling_w, node.format.subsampling_h
+        org: Sequence[vs.VideoNode | Sequence[vs.VideoNode]]
 
-        org: list[vs.VideoNode | list[vs.VideoNode | list[vs.VideoNode]]] = planes
-
-        if subsampling in ((2, 2), (2, 0)):
-            middle = [planes[1].std.BlankClip(), *planes[1:], planes[1].std.BlankClip()]
-
+        if node.format.subsampling_w == 2:
+            middle = [(blank := planes[1].std.BlankClip(keep=True)), *planes[1:], blank]
             org = [planes[0], middle]
-        elif subsampling != (0, 0):
+
+        elif node.format.subsampling_w == 1:
             org = [planes[0], planes[1:]]
+        else:
+            org = planes
 
-        if subsampling[1] == 0:
-            org = [org]
-
-        return stack_clips(org)
+        return depth(stack_clips([org]), 8, dither_type=DitherType.NONE)
