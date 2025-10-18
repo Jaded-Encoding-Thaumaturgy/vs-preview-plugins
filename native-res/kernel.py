@@ -21,7 +21,6 @@ from vskernels import (
     BorderHandling,
     Catrom,
     Kernel,
-    KernelLike,
     Lanczos,
     Mitchell,
     SampleGridModel,
@@ -186,7 +185,7 @@ def _create_common_kernels(
     sample_grid_model: SampleGridModel = SampleGridModel.MATCH_EDGES,
     linear: bool = False,
     border_handling: BorderHandling = BorderHandling.MIRROR,
-) -> list[KernelLike]:
+) -> list[Kernel]:
     return [
         Catrom(
             sample_grid_model=sample_grid_model,
@@ -272,7 +271,7 @@ class KernelRunner(QObject):
         self.gamma_correction = gamma_correction or Transfer.BT709
         self.shift_variations = shift_variations or [(src_top, src_left)]
         self.blur_steps_variations = blur_steps_variations or [1.0]
-        self.data = []
+        self.data = list[Any]()
 
     def _log_kernel_error(self, operation: str, kernel_name: str, error: Exception) -> None:
         logging.error(f"Error {operation} kernel {kernel_name}: {error}")
@@ -288,12 +287,10 @@ class KernelRunner(QObject):
         wclip: vs.VideoNode,
         target_w: int,
         target_h: int,
-        kernel: KernelLike,
+        kernel: Kernel,
         shift_top: float,
         shift_left: float,
     ) -> tuple[float, float]:
-        kernel = Kernel.ensure_obj(kernel)
-
         ceil_bw = mod2(ceil(target_w)) + int(self.analyzer.bs_parity_switch.isChecked())
         ceil_bh = mod2(ceil(target_h)) + int(self.analyzer.bs_parity_switch.isChecked())
 
@@ -375,13 +372,13 @@ class KernelRunner(QObject):
         wclip: vs.VideoNode,
         target_w: int,
         target_h: int,
-        kernel: KernelLike,
+        kernel: Kernel,
         shift_top: float,
         shift_left: float,
         kernel_index: int,
         shift_index: int,
         total_kernels: int,
-        results: list,
+        results: list[Any],
     ) -> None:
         current_kernel_index = self._calculate_kernel_index(kernel_index, shift_index)
 
@@ -428,7 +425,7 @@ class KernelRunner(QObject):
 
         wclip = depth(get_y(wclip), 32)[self.frame]
 
-        results = []
+        results = list[Any]()
         total_kernels = self._calculate_total_kernels()
 
         for shift_index, (shift_top, shift_left) in enumerate(self.shift_variations):
@@ -533,12 +530,12 @@ class DynamicDataCache[T, R](dict[T, R], VSObject):
         __key = complex_hash.hash(args)
 
         if __key not in self:
-            self[__key] = self.get_data(args)  # type: ignore
+            self[__key] = self.get_data(args)
 
             if len(self) > self.cache_size:
                 del self[next(iter(self.keys()))]
 
-        return super().__getitem__(__key)  # type: ignore
+        return super().__getitem__(__key)
 
     def __vs_del__(self, core_id: int) -> None:
         self.clear()
@@ -881,7 +878,7 @@ class KernelAnalyzer(ExtendedWidget):
     def _setup_control_size_policy(self, control: QWidget) -> None:
         control.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
 
-    def _setup_combobox_height(self, combobox: ComboBox) -> None:
+    def _setup_combobox_height(self, combobox: ComboBox[str]) -> None:
         combobox.setMaximumHeight(CONTROL_HEIGHT)
 
     def _create_labeled_control(self, label_text: str | QLabel, control: QWidget) -> VBoxLayout:
@@ -890,7 +887,7 @@ class KernelAnalyzer(ExtendedWidget):
 
         return VBoxLayout([label_text, control])
 
-    def _safe_kernel_creation(self, kernel_class: type, **kwargs) -> KernelLike | None:
+    def _safe_kernel_creation(self, kernel_class: type[Kernel], **kwargs: Any) -> Kernel | None:
         try:
             return kernel_class(**kwargs)
         except Exception:
@@ -1126,7 +1123,7 @@ class KernelAnalyzer(ExtendedWidget):
             self,
             self.curr_clip,
             int(frame),
-            [k for k in kernels if isinstance(k, Kernel)],
+            kernels,
             target_width,
             target_height,
             src_top,
@@ -1307,7 +1304,7 @@ class KernelAnalyzer(ExtendedWidget):
         self.current_data.clear()
 
 
-def _safe_kernel_creation(kernel_class: type, **kwargs) -> KernelLike | None:
+def _safe_kernel_creation(kernel_class: type[Kernel], **kwargs: Any) -> Kernel | None:
     try:
         return kernel_class(**kwargs)
     except Exception:
@@ -1315,9 +1312,9 @@ def _safe_kernel_creation(kernel_class: type, **kwargs) -> KernelLike | None:
 
 
 def _create_blur_variations(
-    kernel: KernelLike,
+    kernel: Kernel,
     blur_values: list[float],
-    add_kernel_instance: Callable[[KernelLike], None],
+    add_kernel_instance: Callable[[Kernel], None],
 ) -> None:
     for blur in blur_values:
         if blur != 1.0:
@@ -1345,7 +1342,7 @@ def _create_blur_variations(
 
 def _apply_global_options_to_common_kernels(
     windowed_options: dict[str, float],
-    add_kernel_instance: Callable[[KernelLike], None],
+    add_kernel_instance: Callable[[Kernel], None],
     sample_grid_model: SampleGridModel = SampleGridModel.MATCH_EDGES,
     linear: bool = False,
     border_handling: BorderHandling = BorderHandling.MIRROR,
@@ -1370,7 +1367,7 @@ def _apply_global_options_to_common_kernels(
 
 def _generate_lanczos_kernels(
     windowed_options: dict[str, float],
-    add_kernel_instance: Callable[[KernelLike], None],
+    add_kernel_instance: Callable[[Kernel], None],
     sample_grid_model: SampleGridModel = SampleGridModel.MATCH_EDGES,
     linear: bool = False,
     border_handling: BorderHandling = BorderHandling.MIRROR,
@@ -1411,7 +1408,7 @@ def _generate_lanczos_kernels(
 
 def _generate_gaussian_kernels(
     windowed_options: dict[str, float],
-    add_kernel_instance: Callable[[KernelLike], None],
+    add_kernel_instance: Callable[[Kernel], None],
     sample_grid_model: SampleGridModel = SampleGridModel.MATCH_EDGES,
     linear: bool = False,
     border_handling: BorderHandling = BorderHandling.MIRROR,
@@ -1457,7 +1454,7 @@ def _generate_gaussian_kernels(
 
 def _generate_bicubic_kernels(
     windowed_options: dict[str, float],
-    add_kernel_instance: Callable[[KernelLike], None],
+    add_kernel_instance: Callable[[Kernel], None],
     sample_grid_model: SampleGridModel = SampleGridModel.MATCH_EDGES,
     linear: bool = False,
     border_handling: BorderHandling = BorderHandling.MIRROR,
@@ -1509,7 +1506,7 @@ def _generate_bicubic_kernels(
 
 def _generate_spline_kernels(
     windowed_options: dict[str, float],
-    add_kernel_instance: Callable[[KernelLike], None],
+    add_kernel_instance: Callable[[Kernel], None],
     sample_grid_model: SampleGridModel = SampleGridModel.MATCH_EDGES,
     linear: bool = False,
     border_handling: BorderHandling = BorderHandling.MIRROR,
@@ -1607,12 +1604,12 @@ def get_analysis_kernels(
     sample_grid_model: SampleGridModel = SampleGridModel.MATCH_EDGES,
     linear: bool = False,
     border_handling: BorderHandling = BorderHandling.MIRROR,
-) -> list[KernelLike]:
+) -> list[Kernel]:
     import importlib
     import inspect
 
-    def kernel_key(kernel):
-        attrs = []
+    def kernel_key(kernel: Kernel) -> tuple[tuple[str, float], ...]:
+        attrs = list[tuple[str, float]]()
 
         for attr in ("b", "c", "taps", "sigma", "blur"):
             if hasattr(kernel, attr):
@@ -1630,7 +1627,7 @@ def get_analysis_kernels(
     added_instances = set()
     uncommon = []
 
-    def add_kernel_instance(kernel: KernelLike) -> None:
+    def add_kernel_instance(kernel: Kernel) -> None:
         key = kernel_key(kernel)
 
         if key not in common_instances and key not in added_instances:
@@ -1693,7 +1690,7 @@ def get_analysis_kernels(
         "vskernels.kernels.placebo",
     ]
 
-    all_kernel_classes = set()
+    all_kernel_classes = set[type[Kernel]]()
 
     for module_name in vskernel_modules:
         try:
@@ -1723,7 +1720,7 @@ def get_analysis_kernels(
 
     for kernel_class in all_kernel_classes:
         try:
-            param_sets = []
+            param_sets = list[dict[str, Any]]()
 
             if kernel_class.__name__ in [
                 "Lanczos",
@@ -1778,7 +1775,7 @@ def get_analysis_kernels(
     return result
 
 
-def _deduplicate_kernels(kernels: list[KernelLike]) -> list[KernelLike]:
+def _deduplicate_kernels(kernels: list[Kernel]) -> list[Kernel]:
     dedup_keys = set()
     deduped_kernels = []
 
@@ -1810,7 +1807,7 @@ def _deduplicate_kernels(kernels: list[KernelLike]) -> list[KernelLike]:
 
 
 def _format_kernel_name(
-    kernel: KernelLike,
+    kernel: Kernel,
     src_top: float = 0.0,
     src_left: float = 0.0,
     blur_steps: float = 1.0,
