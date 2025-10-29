@@ -1,4 +1,5 @@
 from typing import Any
+
 from PyQt6.QtWidgets import QHBoxLayout, QWidget
 
 __all__ = [

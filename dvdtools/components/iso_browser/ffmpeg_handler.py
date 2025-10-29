@@ -276,16 +276,14 @@ class FFmpegHandler:
             chapter_count = title_info.get("chapter_count", 0)
 
             # Only add chapter_start if it's not the first chapter
-            if self.chapter_start is not None:
-                if self.chapter_start > 1:
-                    debug(debug_mapping["adding_chapter_start"].format(self.chapter_start))
-                    cmd.extend(["-chapter_start", str(self.chapter_start)])
+            if self.chapter_start is not None and self.chapter_start > 1:
+                debug(debug_mapping["adding_chapter_start"].format(self.chapter_start))
+                cmd.extend(["-chapter_start", str(self.chapter_start)])
 
             # Only add chapter_end if it's not the last chapter
-            if self.chapter_end is not None:
-                if self.chapter_end < chapter_count:
-                    debug(debug_mapping["adding_chapter_end"].format(self.chapter_end))
-                    cmd.extend(["-chapter_end", str(self.chapter_end)])
+            if self.chapter_end is not None and self.chapter_end < chapter_count:
+                debug(debug_mapping["adding_chapter_end"].format(self.chapter_end))
+                cmd.extend(["-chapter_end", str(self.chapter_end)])
         else:
             debug(debug_mapping["no_chapters"])
 

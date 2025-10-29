@@ -54,7 +54,7 @@ class ISOTreeManager:
             self._add_titles_to_tree()
             self.tree.expandAll()
 
-            if not self.parent.iso_path.suffix.lower() == ".ifo":
+            if self.parent.iso_path.suffix.lower() != ".ifo":
                 self.parent.dump_all_titles_button.setEnabled(self.parent.iso_file.title_count > 0)
         except Exception as e:
             error(error_mapping["populate_tree_failed"].format(e, format_exc()))
