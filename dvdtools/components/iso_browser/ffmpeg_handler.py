@@ -148,7 +148,12 @@ class FFmpegHandler:
 
         try:
             result = subprocess.run(
-                ["ffmpeg", "-hide_banner", "-h", "demuxer=dvdvideo"], capture_output=True, text=True, check=True
+                ["ffmpeg", "-hide_banner", "-h", "demuxer=dvdvideo"],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                check=True,
             )
         except (subprocess.CalledProcessError, FileNotFoundError) as e:
             error(error_mapping["ffmpeg_check_failed"].format(e, format_exc()))
@@ -351,16 +356,19 @@ class FFmpegHandler:
         cmd[input_idx] = SPath(input_path).as_posix()
         cmd[-1] = SPath(output_path).as_posix()
 
-        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
         error_output = ""
 
         while True:
-            output = process.stderr.readline()
-            if output == "" and process.poll() is not None:
+            output_bytes = process.stderr.readline() if process.stderr else b""
+
+            if output_bytes == b"" and process.poll() is not None:
                 break
 
-            if output:
+            if output_bytes:
+                output = output_bytes.decode("utf-8", errors="replace")
+
                 error_output += output
 
                 if "time=" in output:
