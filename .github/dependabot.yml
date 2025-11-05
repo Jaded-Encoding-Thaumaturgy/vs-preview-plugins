@@ -4,8 +4,26 @@
 # https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
 
 version: 2
-updates:
-  - package-ecosystem: "" # See documentation for possible values
-    directory: "/" # Location of package manifests
+
+multi-ecosystem-groups:
+  infrastructure:
     schedule:
       interval: "weekly"
+      day: "sunday"
+      time: "16:00"
+      timezone: "Etc/GMT"
+
+updates:
+  - package-ecosystem: "pip"
+    directories:
+      - "/trace-moe"
+      - "/"
+    versioning-strategy: increase-if-necessary
+    patterns: ["*"]
+    multi-ecosystem-group: "infrastructure"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    patterns: ["*"]
+    multi-ecosystem-group: "infrastructure"
+
