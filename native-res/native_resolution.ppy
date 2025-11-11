@@ -5,7 +5,7 @@ from threading import Timer
 from typing import Any, Callable, Sequence, cast
 
 import numpy as np
-from jetpytools import R, T, complex_hash, mod2
+from jetpytools import complex_hash, mod2
 from numpy.typing import NDArray
 from PyQt6.QtCore import QObject, Qt, QThreadPool, pyqtSignal
 from PyQt6.QtGui import QKeySequence
@@ -48,6 +48,7 @@ from vstools import (
     DynamicClipsCache,
     FieldBased,
     Matrix,
+    VSObject,
     clip_data_gather,
     core,
     depth,
@@ -56,14 +57,13 @@ from vstools import (
     padder,
     plane,
     vs,
-    vs_object,
 )
 
 from .kernel import KernelAnalyzer
 
 __all__ = ["NativeResolutionPlugin"]
 
-common_kernels: list[KernelLike] = [
+common_kernels: list[Kernel] = [
     # Bicubic-based
     Catrom(),
     Mitchell(),
@@ -468,7 +468,7 @@ class FrequencyAnalyzer(ExtendedWidget):
         assert self.main.outputs
 
 
-class RescaleWorkClip(DynamicClipsCache[vs.VideoNode, vs.VideoNode]):
+class RescaleWorkClip(DynamicClipsCache[vs.VideoNode]):
     def get_clip(self, key: vs.VideoNode) -> vs.VideoNode:
         return core.resize.Bilinear(key, format=vs.GRAYS, matrix=Matrix.BT709, matrix_in=Matrix.from_video(key))
 
@@ -589,7 +589,7 @@ class RescaleErrorCanvas(PlottingCanvasDefaultFrame):
         self.plugin.results.setText(f"Spikes: {best_indices}")
 
 
-class DynamicDataCache(vs_object, dict[T, R]):
+class DynamicDataCache[T, R](dict[T, R], VSObject):
     def __init__(self, cache_size: int = 2) -> None:
         self.cache_size = cache_size
 
