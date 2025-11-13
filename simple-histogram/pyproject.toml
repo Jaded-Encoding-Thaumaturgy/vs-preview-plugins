@@ -1,0 +1,40 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "vspreview-plugin-simple-histogram"
+dynamic = ["version"]
+description = "A VSPreview plugin to display histograms."
+authors = [{ name = "LightArrowsEXE" }]
+maintainers = [
+    { name = "LightArrowsEXE", email = "LightArrowsReboot@gmail.com" },
+    { name = "Jaded Encoding Thaumaturgy", email = "jaded.encoding.thaumaturgy@gmail.com" },
+]
+requires-python = ">=3.12"
+
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: English",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Graphics",
+]
+
+dependencies = ["VapourSynth", "vspreview", "vsjetpack", "jetpytools", "PyQt6"]
+
+[project.entry-points."vspreview.plugins"]
+simple_histogram = "vspreview_plugin_simple_histogram"
+
+[tool.vspreview.plugins.config]
+namespace = "dev.lightarrowsexe.simple_histogram"
+display_name = "Histogram"
+
+[tool.hatch.version]
+path = "vspreview_plugin_simple_histogram/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+include = ["vspreview_plugin_simple_histogram"]
