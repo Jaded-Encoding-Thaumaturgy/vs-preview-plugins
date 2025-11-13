@@ -8,12 +8,9 @@ A tool for browsing DVDs.
 Supports everything `vssource.IsoFile` supports.
 Loading an ISO file allows you to dump any title or angle to a file.
 
-For more information,
-see the [JET guide on DVD Remuxing](https://jaded-encoding-thaumaturgy.github.io/JET-guide/master/sources/dvd/remuxing/)
+For more information, see the [JET guide on DVD Remuxing](https://jaded-encoding-thaumaturgy.github.io/JET-guide/master/sources/dvd/remuxing/)
 
-Spot an issue?
-Please leave an issue
-with "ISO Browser" in the title.
+Spot an issue? Please leave an issue with "ISO Browser" in the title.
 
 ### Dependencies
 
@@ -43,9 +40,7 @@ with "ISO Browser" in the title.
 ### Limitations
 
 Any limitations of `vssource.IsoFile` and `FFmpeg` apply.
-If you would like a feature to be supported,
-please help implement it
-in the relevant source code!
+If you would like a feature to be supported, please help implement it in the relevant source code!
 
 ## SAR Helper
 

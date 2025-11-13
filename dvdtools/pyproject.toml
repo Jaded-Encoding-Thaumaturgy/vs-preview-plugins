@@ -1,0 +1,40 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "vspreview-plugin-dvdtools"
+dynamic = ["version"]
+description = "A collection of VSPreview plugins for working with DVDs"
+authors = [{ name = "LightArrowsEXE" }]
+maintainers = [
+    { name = "LightArrowsEXE", email = "LightArrowsReboot@gmail.com" },
+    { name = "Jaded Encoding Thaumaturgy", email = "jaded.encoding.thaumaturgy@gmail.com" },
+]
+requires-python = ">=3.12"
+
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: English",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Graphics",
+]
+
+dependencies = ["VapourSynth", "vspreview", "vsjetpack", "PyQt6"]
+
+[project.entry-points."vspreview.plugins"]
+dvdtools = "vspreview_plugin_dvdtools:DVDToolsPlugin"
+
+[tool.vspreview.plugins.config]
+namespace = "dev.lightarrowsexe.dvdtools"
+display_name = "DVD Tools"
+
+[tool.hatch.version]
+path = "vspreview_plugin_dvdtools/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+include = ["vspreview_plugin_dvdtools"]

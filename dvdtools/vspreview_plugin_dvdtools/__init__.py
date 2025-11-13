@@ -10,11 +10,11 @@ from .components.iso_browser.tab import IsoBrowserTab
 
 __all__ = ["DVDToolsPlugin"]
 
+__version__ = "1.0.0"
+
 
 class DVDToolsPlugin(AbstractPlugin, QTabWidget):
     """VSPreview plugin for DVD helpers and tooling."""
-
-    _config = PluginConfig("dev.lightarrowsexe.dvdtools", "DVD Tools")
 
     def __init__(self, main: MainWindow) -> None:
         super().__init__(main)
