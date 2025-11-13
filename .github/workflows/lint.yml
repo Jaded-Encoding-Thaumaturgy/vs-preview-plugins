@@ -4,39 +4,58 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - master
-    paths:
-      - '**.py'
-      - '**.ppy'
+      - dev
   pull_request:
-    paths:
-      - '**.py'
-      - '**.ppy'
+
+env:
+  VAPOURSYNTH_VERSION: 72
+  PYTHON_VERSION: 3.14
 
 jobs:
-  windows:
-    runs-on: windows-latest
-    strategy:
-      matrix:
-        vs-versions:
-          - 68
-        python-version:
-          - '3.12'
+  lint:
+    runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v5
+      - name: Checkout repository
+        uses: actions/checkout@v5
 
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v6
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
 
-      - name: Install dependencies
+      - name: Set up VapourSynth ${{ env.VAPOURSYNTH_VERSION }}
+        uses: Jaded-Encoding-Thaumaturgy/setup-vapoursynth@v1
+        with:
+          vapoursynth-version: ${{ env.VAPOURSYNTH_VERSION }}
+
+      # Option 1: Sync each plugin individually
+      - name: 🔄 Sync all plugin environments
         run: |
-          python3 -m pip install --upgrade pip
-          pip install vapoursynth-portable==${{ matrix.vs-versions }}
-          Get-ChildItem -Recurse -Filter requirements.txt | ForEach-Object { pip install -r $_.FullName }
-          pip install -r requirements-dev.txt
+          set -euo pipefail
+          for folder in */; do
+            folder_name="${folder%/}"
 
-      - name: Running ruff
-        run: ruff check .
+            if [[ "$folder_name" == .* ]]; then
+              continue
+            fi
+
+            if [ -f "$folder/uv.lock" ]; then
+              echo "Syncing $folder_name"
+              (cd "$folder_name" && uv sync --frozen)
+            fi
+          done
+
+      - name: Run Ruff check
+        id: ruff-check
+        run: uvx ruff@latest check . --output-format=github
+
+      - name: Run Ruff format
+        id: ruff-format
+        if: success() || (failure() && steps.ruff-check.conclusion == 'failure')
+        run: uvx ruff@latest format --check --diff
+
+      - name: Running mypy
+        if: success() || (failure() && (steps.ruff-check.conclusion == 'failure' || steps.ruff-format.conclusion == 'failure'))
+        run: uvx mypy@latest .
