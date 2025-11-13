@@ -1,6 +1,7 @@
 target-version = "py312"
 
 extend-include = ["*.ppy"]
+extend-exclude = [".stubs/vapoursynth"]
 line-length = 120
 indent-width = 4
 
