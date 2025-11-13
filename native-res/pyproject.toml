@@ -1,0 +1,47 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "vspreview-plugin-native-res"
+dynamic = ["version"]
+description = "A VSPreview plugin for analyzing and determining the native resolution of video content."
+authors = [{ name = "Jaded Encoding Thaumaturgy" }]
+maintainers = [
+    { name = "Jaded Encoding Thaumaturgy", email = "jaded.encoding.thaumaturgy@gmail.com" },
+]
+requires-python = ">=3.12"
+
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: English",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Graphics",
+]
+
+dependencies = [
+    "VapourSynth",
+    "vspreview",
+    "vsjetpack",
+    "jetpytools",
+    "PyQt6",
+    "numpy>=2.0.0, <3.0.0",
+    "scipy>=1.16.0, <2.0.0",
+]
+
+[project.entry-points."vspreview.plugins"]
+native_res = "vspreview_plugin_native_res"
+
+[tool.vspreview.plugins.config]
+namespace = "dev.setsugen.native_resolution" # Probably useless
+display_name = "Native Resolution"
+
+[tool.hatch.version]
+path = "vspreview_plugin_native_res/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+include = ["vspreview_plugin_native_res"]
