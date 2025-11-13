@@ -19,12 +19,9 @@ class DFTViewPlugin(MappedNodesViewPlugin):
     @initialize_input(bits=32, dither_type=DitherType.NONE)
     def get_node(self, node: vs.VideoNode) -> vs.VideoNode:
         if not hasattr(vs.core, "fftspectrum_rs"):
-            getLogger().error(
-                f'The required plugin "fftspectrum_rs" is not installed. Please install it from: {self._url}'
-            )
-            return node.std.BlankClip().text.Text(
-                f'The required plugin "fftspectrum_rs" is not installed. Please install it from: {self._url}', 5, 4
-            )
+            message = f'The required plugin "fftspectrum_rs" is not installed. Please install it from: {self._url}'
+            getLogger().error(message)
+            return node.std.BlankClip().text.Text(message, 5, 4)
 
         assert node.format
         planes = split(node)
