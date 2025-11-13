@@ -39,7 +39,7 @@ dependencies = [
 [project.entry-points."vspreview.plugins"]
 trace-moe = "vspreview_plugin_trace_moe:TraceMoePlugin"
 
-[tool.vspreview.config]
+[tool.vspreview.plugins.config]
 namespace = "dev.lightarrowsexe.trace_moe"
 display_name = "Trace.moe"
 

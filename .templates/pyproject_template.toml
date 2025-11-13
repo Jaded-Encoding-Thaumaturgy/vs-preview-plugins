@@ -3,13 +3,11 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "vspreview-plugin-dft-view"
+name = "vspreview-plugin-my-plugin"
 dynamic = ["version"]
-description = "A VSPreview plugin that displays the Discrete Fourier Transform (DFT) of all planes of a video node."
-authors = [{ name = "Jaded Encoding Thaumaturgy" }]
-maintainers = [
-    { name = "Jaded Encoding Thaumaturgy", email = "jaded.encoding.thaumaturgy@gmail.com" },
-]
+description = "MyDescription"
+authors = [{ name = "MyName" }]
+maintainers = [{ name = "MyName", email = "MyName@mail.com" }]
 requires-python = ">=3.12"
 
 classifiers = [
@@ -26,14 +24,14 @@ classifiers = [
 dependencies = ["VapourSynth", "vspreview", "vsjetpack"]
 
 [project.entry-points."vspreview.plugins"]
-dft-view = "vspreview_plugin_dft_view:DFTViewPlugin"
+my_plugin = "vspreview_plugin_my_plugin"
 
 [tool.vspreview.plugins.config]
-namespace = "dev.setsugen.fft_view"
-display_name = "DFT View"
+namespace = "xyz.my_name.my_plugin"
+display_name = "MyPlugin"
 
 [tool.hatch.version]
-path = "vspreview_plugin_dft_view/__init__.py"
+path = "vspreview_plugin_my_plugin/__init__.py"
 
 [tool.hatch.build.targets.wheel]
-include = ["vspreview_plugin_dft_view"]
+include = ["vspreview_plugin_my_plugin"]
