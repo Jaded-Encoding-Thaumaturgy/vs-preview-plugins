@@ -12,8 +12,6 @@ __all__ = ["TraceMoePlugin"]
 class TraceMoePlugin(AbstractPlugin, QTabWidget):
     """VSPreview plugin for Trace.moe anime tracing."""
 
-    _config = PluginConfig("dev.lightarrowsexe.trace_moe", "Trace.moe")
-
     def __init__(self, main: MainWindow) -> None:
         super().__init__(main)
 

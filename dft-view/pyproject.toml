@@ -25,11 +25,12 @@ classifiers = [
 
 dependencies = ["VapourSynth", "vspreview", "vsjetpack"]
 
-[dependency-groups]
-dev = ["mypy", "ruff", "twine"]
-
 [project.entry-points."vspreview.plugins"]
 dft-view = "vspreview_plugin_dft_view:DFTViewPlugin"
+
+[tool.vspreview.config]
+namespace = "dev.setsugen.fft_view"
+display_name = "DFT View"
 
 [tool.hatch.version]
 path = "vspreview_plugin_dft_view/__init__.py"

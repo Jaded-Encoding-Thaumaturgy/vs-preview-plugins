@@ -31,6 +31,10 @@ dev = ["mypy", "ruff", "twine"]
 [project.entry-points."vspreview.plugins"]
 sivtc = "vspreview_plugin_sivtc:SIVTCPlugin"
 
+[tool.vspreview.config]
+namespace = "dev.setsugen.sivtc"
+display_name = "SIVTC"
+
 [tool.hatch.version]
 path = "vspreview_plugin_sivtc/__init__.py"
 
