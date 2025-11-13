@@ -82,12 +82,13 @@ class AnilistInfo(BaseModel):
             "}"
         )
 
+        response = requests.post(api_url, json={"query": query, "variables": variables}, timeout=15.0)
+
         try:
-            response = requests.post(api_url, json={"query": query, "variables": variables}, timeout=15.0)
             response.raise_for_status()
         except requests.HTTPError as e:
             logger.error(f"AniList API returned a non-successful status code for Anilist ID {self.anilist_id}: {e}")
-            logger.debug(f"AniList API response: {response.text}")  # type: ignore
+            logger.debug(f"AniList API response: {response.text}")
             return
 
         data = dict(self._safe_get(json.loads(response.text), "data", {}))
@@ -237,7 +238,7 @@ class MatchInfo(BaseModel):
         image_content = response.content
 
         with open(out_spath.to_str(), "wb") as f:
-            f.write(image_content)  # type: ignore
+            f.write(image_content)
 
         if not out_spath.exists():
             raise FileWasNotFoundError(

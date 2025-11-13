@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import logging
 from functools import partial
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from PyQt6.QtCore import Qt, QThread
-from PyQt6.QtGui import QIntValidator, QPixmap
+from PyQt6.QtGui import QIntValidator, QPixmap, QResizeEvent
 from PyQt6.QtWidgets import (
     QLabel,
     QLineEdit,
@@ -18,8 +19,11 @@ from PyQt6.QtWidgets import (
 )
 from vspreview.core import ExtendedWidget, HBoxLayout, VBoxLayout
 
-from .models import SearchResult
+from .models import MatchInfo, SearchResult
 from .worker import Worker, WorkerConfiguration
+
+if TYPE_CHECKING:
+    from ...trace_moe import TraceMoePlugin
 
 
 class TraceTab(ExtendedWidget):
@@ -33,11 +37,11 @@ class TraceTab(ExtendedWidget):
         "worker_thread",
     )
 
-    def __init__(self, plugin) -> None:
+    def __init__(self, plugin: TraceMoePlugin) -> None:
         super().__init__()
         self.plugin = plugin
-        self.worker_thread = None
-        self.worker = None
+        self.worker_thread: QThread | None = None
+        self.worker: Worker | None = None
 
         self.setup_ui()
 
@@ -107,7 +111,7 @@ class TraceTab(ExtendedWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
 
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self.match_widgets = []
+        self.match_widgets = list[tuple[MatchInfo, QWidget]]()
 
         header_widget = QWidget()
         header_widget.setContentsMargins(0, 0, 0, 0)
@@ -193,7 +197,7 @@ class TraceTab(ExtendedWidget):
                 else:
                     del item
 
-        self.match_widgets = []
+        self.match_widgets = list[tuple[MatchInfo, QWidget]]()
         self.status_label.setText("Waiting...")
 
     def show_results(self, search_result: SearchResult) -> None:
@@ -204,7 +208,7 @@ class TraceTab(ExtendedWidget):
             self.status_label.setText(f"No matches above {min_similarity_percent}%")
             return
 
-        self.match_widgets = []
+        self.match_widgets = list[tuple[MatchInfo, QWidget]]()
 
         for i, match in enumerate(search_result.matches):
             match_widget = self.create_match_widget(match, i)
@@ -223,7 +227,7 @@ class TraceTab(ExtendedWidget):
         self.status_label.setText("Done!")
         self.results_layout.addStretch(1)
 
-    def create_match_widget(self, match, index: int) -> QWidget:
+    def create_match_widget(self, match: MatchInfo, index: int) -> QWidget:
         match_widget = QWidget()
         match_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         match_widget.setMaximumHeight(154)
@@ -345,7 +349,7 @@ class TraceTab(ExtendedWidget):
 
         return match_widget
 
-    def load_thumbnail(self, match, match_widget) -> None:
+    def load_thumbnail(self, match: MatchInfo, match_widget: QWidget) -> None:
         try:
             thumbnail_path = match.download_image()
             label = match_widget.image_label
@@ -371,7 +375,7 @@ class TraceTab(ExtendedWidget):
             print(f"Failed to load thumbnail: {e}")
             match_widget.image_label.setText("Error loading")
 
-    def resizeEvent(self, a0) -> None:  # noqa
+    def resizeEvent(self, a0: QResizeEvent | None) -> None:  # noqa: N802
         super().resizeEvent(a0)
 
         for _, w in getattr(self, "match_widgets", []):

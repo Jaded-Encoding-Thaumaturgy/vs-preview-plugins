@@ -101,10 +101,9 @@ class Worker(QObject):
 
         clip = FieldBased.PROGRESSIVE.apply(clip)
 
-        if (matrix := Matrix.from_video(clip, strict=False)) is Matrix.UNKNOWN:
-            matrix = Matrix.from_res(clip)
-
-        return Bilinear().scale(clip, get_w(360, clip), 360, format=vs.RGB24, matrix=matrix)
+        return Bilinear().scale(
+            clip, get_w(360, clip), 360, format=vs.RGB24, matrix=Matrix.from_video(clip, strict=False)
+        )
 
     async def _get_response_from_api(self, conf: WorkerConfiguration, image_path: SPath) -> SearchResult:
         return await asyncio.to_thread(
