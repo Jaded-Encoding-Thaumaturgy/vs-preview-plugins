@@ -29,7 +29,7 @@ dependencies = ["VapourSynth", "vspreview", "vsjetpack"]
 dev = ["mypy", "ruff", "twine"]
 
 [project.entry-points."vspreview.plugins"]
-dft-view = "vspreview_plugin_dft_view"
+dft-view = "vspreview_plugin_dft_view:DFTViewPlugin"
 
 [tool.hatch.version]
 path = "vspreview_plugin_dft_view/__init__.py"

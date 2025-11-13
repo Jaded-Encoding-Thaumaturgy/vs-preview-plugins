@@ -40,7 +40,7 @@ dependencies = [
 dev = ["mypy", "ruff", "twine"]
 
 [project.entry-points."vspreview.plugins"]
-trace-moe = "vspreview_plugin_trace_moe"
+trace-moe = "vspreview_plugin_trace_moe:TraceMoePlugin"
 
 [tool.hatch.version]
 path = "vspreview_plugin_trace_moe/__init__.py"

@@ -29,7 +29,7 @@ dependencies = ["VapourSynth", "vspreview", "vsjetpack", "PyQt6"]
 dev = ["mypy", "ruff", "twine"]
 
 [project.entry-points."vspreview.plugins"]
-sivtc = "vspreview_plugin_sivtc"
+sivtc = "vspreview_plugin_sivtc:SIVTCPlugin"
 
 [tool.hatch.version]
 path = "vspreview_plugin_sivtc/__init__.py"
