@@ -34,7 +34,7 @@ dependencies = [
 ]
 
 [project.entry-points."vspreview.plugins"]
-native_res = "vspreview_plugin_native_res"
+native_res = "vspreview_plugin_native_res:NativeResolutionPlugin"
 
 [tool.vspreview.plugins.config]
 namespace = "dev.setsugen.native_resolution" # Probably useless

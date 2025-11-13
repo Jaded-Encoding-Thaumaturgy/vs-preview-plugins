@@ -27,7 +27,7 @@ classifiers = [
 dependencies = ["VapourSynth", "vspreview", "vsjetpack", "jetpytools", "PyQt6"]
 
 [project.entry-points."vspreview.plugins"]
-simple_histogram = "vspreview_plugin_simple_histogram"
+simple_histogram = "vspreview_plugin_simple_histogram:SimpleHistogramWidget"
 
 [tool.vspreview.plugins.config]
 namespace = "dev.lightarrowsexe.simple_histogram"
