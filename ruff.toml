@@ -8,14 +8,7 @@ indent-width = 4
 docstring-code-format = true
 
 [lint]
-extend-select = [
-    "E",
-    "C4",
-    "I",
-    "PYI",
-    "Q",
-    "SIM",
-    "N",
-    "W",
-    "RUF"
-]
+extend-select = ["E", "C4", "I", "PYI", "Q", "SIM", "N", "W", "RUF"]
+
+[lint.per-file-ignores]
+"__init__.*" = ["F401", "F403"]
