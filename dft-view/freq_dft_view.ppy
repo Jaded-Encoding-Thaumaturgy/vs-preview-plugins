@@ -45,4 +45,4 @@ class DFTViewPlugin(MappedNodesViewPlugin):
         else:
             org = planes
 
-        return depth(stack_clips([org]), 8, dither_type=DitherType.NONE)
+        return depth(stack_clips([org]), 8, dither_type=DitherType.NONE).std.RemoveFrameProps()
