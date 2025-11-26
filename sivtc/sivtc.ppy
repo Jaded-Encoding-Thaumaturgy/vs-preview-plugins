@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from logging import getLogger
+
 from PyQt6.QtWidgets import QLabel, QWidget
 from vsdeinterlace import sivtc
 from vspreview.core import Frame, HBoxLayout, SpinBox, Stretch, Switch, VBoxLayout
@@ -34,3 +36,10 @@ class SIVTCPlugin(MappedNodesPlugin, QWidget):
     def on_current_frame_changed(self, frame: Frame) -> None:
         frame = self.outputs.current.to_frame(self.main.current_output.to_time(frame))
         self.outputs.current.render_frame(frame, None, None, self.view.current_scene)
+
+
+getLogger().warning(
+    f'The "{SIVTCPlugin._config.display_name}"" plugin has been installed from the "master" branch, '
+    "which has been sunset and will no longer receive updates. "
+    "Please update VSPreview to version 0.18.0 or later and re-install this plugin."
+)
