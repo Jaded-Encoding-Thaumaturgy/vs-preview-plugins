@@ -303,7 +303,7 @@ class KernelRunner(QObject):
             shift_top,
             shift_left,
             (0, 0, 0, 0),
-            "hw"[self.analyzer.dimension_switch.isChecked()],
+            mode="hw"[self.analyzer.dimension_switch.isChecked()],
         ).kwargs()
 
         logging.debug(
